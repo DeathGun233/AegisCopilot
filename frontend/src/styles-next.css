@@ -298,8 +298,85 @@ button {
   gap: 18px;
 }
 
+.app-main {
+  display: grid;
+  gap: 18px;
+}
+
+.main-header {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(320px, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+
+.header-title h1 {
+  margin: 6px 0 0;
+  font-size: clamp(26px, 3vw, 38px);
+  letter-spacing: -0.03em;
+}
+
+.workspace-nav {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.workspace-tab {
+  min-width: 116px;
+  padding: 10px 14px;
+  border: 1px solid rgba(23, 32, 42, 0.08);
+  border-radius: 16px;
+  background: rgba(245, 248, 252, 0.98);
+  color: #273142;
+  text-align: left;
+}
+
+.workspace-tab strong,
+.workspace-tab small {
+  display: block;
+}
+
+.workspace-tab strong {
+  font-size: 14px;
+}
+
+.workspace-tab small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workspace-tab.active {
+  color: white;
+  background: linear-gradient(135deg, var(--blue), var(--blue-strong));
+  border-color: transparent;
+  box-shadow: 0 12px 24px rgba(47, 107, 255, 0.22);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.compact select {
+  min-width: 150px;
+}
+
 .chat-workspace {
-  min-height: calc(100vh - 200px);
+  display: grid;
+  gap: 16px;
+  min-height: calc(100vh - 220px);
 }
 
 .sidebar,
@@ -352,8 +429,8 @@ button {
 
 .sidebar-card h2,
 .panel h2,
-.admin-hero h1,
-.hero-copy h1,
+.admin-hero h2,
+.hero-copy h2,
 .highlight-card h3 {
   margin: 0;
 }
@@ -488,7 +565,7 @@ button {
   font-size: 12px;
 }
 
-.hero-copy h1 {
+.hero-copy h2 {
   margin-top: 12px;
   font-size: clamp(34px, 4vw, 64px);
   letter-spacing: -0.04em;
@@ -677,7 +754,7 @@ button {
   padding: 22px 24px;
 }
 
-.admin-hero h1 {
+.admin-hero h2 {
   font-size: clamp(28px, 3vw, 44px);
   margin-top: 10px;
 }
@@ -715,6 +792,10 @@ button {
 
 .panel {
   padding: 18px;
+}
+
+.knowledge-panel {
+  gap: 16px;
 }
 
 .knowledge-panel,
