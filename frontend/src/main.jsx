@@ -1,10 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { AppAdminConsole } from "./AppAdminConsole";
+import { AppProductConsole } from "./AppProductConsole";
 import "./styles-next.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <AppAdminConsole />
+    <AppProductConsole />
   </React.StrictMode>,
 );
