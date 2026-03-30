@@ -2,10 +2,12 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+*.log
 node_modules/
 dist/
 .DS_Store
 coverage/
+*.egg-info/
 backend/.mypy_cache/
 backend/storage/
 frontend/.vite/
