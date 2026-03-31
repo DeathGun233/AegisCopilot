@@ -36,7 +36,7 @@ class RetrievalService:
                     text=chunk.text,
                     score=score,
                     source=f"{chunk.document_title}#chunk-{chunk.chunk_index}",
-                    display_source=f"{chunk.document_title} | 片段 {chunk.chunk_index + 1}",
+                    display_source=f"{chunk.document_title} | chunk {chunk.chunk_index + 1}",
                 )
             )
 

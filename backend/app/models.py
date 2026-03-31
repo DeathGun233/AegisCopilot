@@ -52,6 +52,7 @@ class Message(BaseModel):
 
 class Conversation(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
+    owner_id: str = "admin"
     title: str = "New conversation"
     messages: list[Message] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
@@ -113,8 +114,16 @@ class User(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class AuthSession(BaseModel):
+    token: str = Field(default_factory=lambda: uuid4().hex)
+    user_id: str
+    created_at: datetime = Field(default_factory=utc_now)
+    last_seen_at: datetime = Field(default_factory=utc_now)
+
+
 class AgentTask(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
+    user_id: str = "admin"
     conversation_id: str
     query: str
     intent: Intent

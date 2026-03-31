@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .models import (
     AgentTask,
@@ -13,8 +13,8 @@ from .models import (
     Message,
     ModelCatalog,
     RetrievalResult,
-    User,
     SystemStats,
+    User,
 )
 
 
@@ -22,8 +22,8 @@ class DocumentSummary(Document):
     chunk_count: int = 0
     indexed: bool = False
     index_state: DocumentIndexState = DocumentIndexState.pending
-    index_state_label: str = "未索引"
-    indexed_label: str = "未索引"
+    index_state_label: str = "Pending"
+    indexed_label: str = "Not indexed"
     source_label: str = ""
     tag_count: int = 0
     content_preview: str = ""
@@ -39,7 +39,7 @@ class ChunkSummary(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class DocumentDetail(BaseModel):
+class DocumentDetailResponse(BaseModel):
     document: DocumentSummary
     chunks: list[ChunkSummary] = Field(default_factory=list)
 
@@ -91,6 +91,7 @@ class RetrievalPreviewResponse(BaseModel):
 
 
 class ModelSelectRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     model_id: str
 
 
@@ -113,9 +114,18 @@ class CurrentUserResponse(BaseModel):
     user: UserSummary
 
 
-class DocumentDetailResponse(BaseModel):
-    document: DocumentSummary
-    chunks: list[ChunkSummary] = Field(default_factory=list)
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: UserSummary
+
+
+class LogoutResponse(BaseModel):
+    success: bool = True
 
 
 class EvaluationResponse(BaseModel):

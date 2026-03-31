@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
-
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api_schemas import (
@@ -10,19 +8,22 @@ from .api_schemas import (
     ChatResponse,
     ConversationCreateRequest,
     ConversationListResponse,
+    CurrentUserResponse,
     DocumentCreateRequest,
     DocumentDetailResponse,
     DocumentListResponse,
     DocumentSummary,
     EvaluationResponse,
     IndexResponse,
+    LoginRequest,
+    LoginResponse,
+    LogoutResponse,
     ModelCatalogResponse,
     ModelSelectRequest,
-    CurrentUserResponse,
-    UserListResponse,
     RetrievalPreviewRequest,
     RetrievalPreviewResponse,
     SystemStatsResponse,
+    UserListResponse,
 )
 from .config import settings
 from .deps import get_container, get_current_user
@@ -66,15 +67,24 @@ def health() -> dict[str, str]:
 
 def _require_admin(user: User) -> None:
     if user.role != UserRole.admin:
-        raise HTTPException(status_code=403, detail="admin access required")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin access required")
+
+
+def _extract_bearer_token(authorization: str | None) -> str:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    return token
 
 
 def _friendly_source_type(source_type: str) -> str:
     normalized = source_type.strip().lower()
     return {
-        "upload": "上传文件",
-        "seed": "示例文档",
-        "text": "手工录入",
+        "upload": "Uploaded file",
+        "seed": "Sample document",
+        "text": "Manual input",
         "pdf": "PDF",
         "docx": "Word",
         "markdown": "Markdown",
@@ -89,9 +99,9 @@ def _build_document_summary(document, chunk_count: int) -> DocumentSummary:
         chunk_count=chunk_count,
         indexed=indexed,
         index_state="indexed" if indexed else "pending",
-        index_state_label="已索引" if indexed else "未索引",
-        indexed_label=f"已索引 · {chunk_count} 片段" if indexed else "未索引",
-        source_label=f"{_friendly_source_type(document.source_type)} · {document.department}",
+        index_state_label="Indexed" if indexed else "Pending",
+        indexed_label=f"Indexed with {chunk_count} chunks" if indexed else "Not indexed",
+        source_label=f"{_friendly_source_type(document.source_type)} / {document.department}",
         tag_count=len(document.tags),
         content_preview=preview,
     )
@@ -148,14 +158,51 @@ def _sort_documents(documents: list[DocumentSummary], sort_by: str) -> list[Docu
     )
 
 
-@app.get("/system/stats", response_model=SystemStatsResponse)
-def get_system_stats() -> SystemStatsResponse:
+def _ensure_conversation_owner(conversation, current_user: User) -> None:
+    if conversation.owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+
+
+def _ensure_task_owner(task, current_user: User) -> None:
+    if task.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task not found")
+
+
+@app.post("/auth/login", response_model=LoginResponse)
+def login(request: LoginRequest) -> LoginResponse:
     container = get_container()
-    return SystemStatsResponse(stats=container.system_service.get_stats())
+    try:
+        user, session = container.auth_service.login(request.username, request.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+    return LoginResponse(token=session.token, user=container.user_service.summarize_user(user))
+
+
+@app.post("/auth/logout", response_model=LogoutResponse)
+def logout(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    current_user: User = Depends(get_current_user),
+) -> LogoutResponse:
+    container = get_container()
+    container.auth_service.logout(_extract_bearer_token(authorization))
+    return LogoutResponse(success=True)
+
+
+@app.get("/auth/me", response_model=CurrentUserResponse)
+def auth_me(current_user: User = Depends(get_current_user)) -> CurrentUserResponse:
+    container = get_container()
+    return CurrentUserResponse(user=container.user_service.summarize_user(current_user))
+
+
+@app.get("/system/stats", response_model=SystemStatsResponse)
+def get_system_stats(current_user: User = Depends(get_current_user)) -> SystemStatsResponse:
+    container = get_container()
+    return SystemStatsResponse(stats=container.system_service.get_stats(current_user))
 
 
 @app.get("/users", response_model=UserListResponse)
-def list_users() -> UserListResponse:
+def list_users(current_user: User = Depends(get_current_user)) -> UserListResponse:
+    _require_admin(current_user)
     container = get_container()
     return UserListResponse(users=container.user_service.list_user_summaries())
 
@@ -167,7 +214,7 @@ def get_me(current_user: User = Depends(get_current_user)) -> CurrentUserRespons
 
 
 @app.get("/models", response_model=ModelCatalogResponse)
-def get_model_catalog() -> ModelCatalogResponse:
+def get_model_catalog(current_user: User = Depends(get_current_user)) -> ModelCatalogResponse:
     container = get_container()
     return ModelCatalogResponse(catalog=container.runtime_model_service.get_catalog())
 
@@ -182,38 +229,50 @@ def select_model(
     try:
         catalog = container.runtime_model_service.select_model(request.model_id)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return ModelCatalogResponse(catalog=catalog)
 
 
 @app.get("/conversations", response_model=ConversationListResponse)
-def list_conversations() -> ConversationListResponse:
+def list_conversations(current_user: User = Depends(get_current_user)) -> ConversationListResponse:
     container = get_container()
-    return ConversationListResponse(conversations=container.conversations.list())
+    return ConversationListResponse(conversations=container.conversations.list_for_user(current_user.id))
 
 
 @app.post("/conversations", response_model=dict)
-def create_conversation(request: ConversationCreateRequest) -> dict:
+def create_conversation(
+    request: ConversationCreateRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict:
     container = get_container()
-    conversation = container.conversations.create(title=request.title)
+    conversation = container.conversations.create(title=request.title, owner_id=current_user.id)
     return {"conversation": conversation}
 
 
 @app.get("/conversations/{conversation_id}", response_model=dict)
-def get_conversation(conversation_id: str) -> dict:
+def get_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
     container = get_container()
     conversation = container.conversations.get(conversation_id)
     if conversation is None:
-        raise HTTPException(status_code=404, detail="conversation not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+    _ensure_conversation_owner(conversation, current_user)
     return {"conversation": conversation}
 
 
 @app.delete("/conversations/{conversation_id}", response_model=dict)
-def delete_conversation(conversation_id: str) -> dict:
+def delete_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
     container = get_container()
-    deleted = container.conversations.delete(conversation_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="conversation not found")
+    conversation = container.conversations.get(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+    _ensure_conversation_owner(conversation, current_user)
+    container.conversations.delete(conversation_id)
     return {"deleted": True, "conversation_id": conversation_id}
 
 
@@ -226,6 +285,7 @@ def list_documents(
     tag: str | None = None,
     limit: int | None = None,
     sort_by: str = "updated_desc",
+    current_user: User = Depends(get_current_user),
 ) -> DocumentListResponse:
     container = get_container()
     counts: dict[str, int] = {}
@@ -255,11 +315,14 @@ def list_documents(
 
 
 @app.get("/documents/{document_id}", response_model=DocumentDetailResponse)
-def get_document(document_id: str) -> DocumentDetailResponse:
+def get_document(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+) -> DocumentDetailResponse:
     container = get_container()
     document = container.document_service.get_document(document_id)
     if document is None:
-        raise HTTPException(status_code=404, detail="document not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
 
     chunk_count = container.documents.count_chunks_for_document(document_id)
     summary = _build_document_summary(document, chunk_count)
@@ -298,7 +361,7 @@ def delete_document(
     _require_admin(current_user)
     deleted = container.document_service.delete_document(document_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="document not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
     return {"deleted": True, "document_id": document_id}
 
 
@@ -313,7 +376,7 @@ async def upload_document(
     try:
         content = container.extraction_service.extract(file.filename or "uploaded-file", raw)
     except ExtractionError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     document = container.document_service.create_document(
         title=file.filename or "uploaded-file",
         content=normalize_text(content),
@@ -335,29 +398,36 @@ def index_document(
     _require_admin(current_user)
     document_id = payload.get("document_id")
     if not document_id:
-        raise HTTPException(status_code=400, detail="document_id is required")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="document_id is required")
     try:
         chunks_created = container.document_service.index_document(document_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="document not found") from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found") from exc
     return IndexResponse(document_id=document_id, chunks_created=chunks_created)
 
 
 @app.post("/retrieval/preview", response_model=RetrievalPreviewResponse)
-def preview_retrieval(request: RetrievalPreviewRequest) -> RetrievalPreviewResponse:
+def preview_retrieval(
+    request: RetrievalPreviewRequest,
+    current_user: User = Depends(get_current_user),
+) -> RetrievalPreviewResponse:
     container = get_container()
     return RetrievalPreviewResponse(results=container.retrieval_service.search(request.query, request.top_k))
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest) -> ChatResponse:
+def chat(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user),
+) -> ChatResponse:
     container = get_container()
     if request.conversation_id:
         conversation = container.conversations.get(request.conversation_id)
         if conversation is None:
-            raise HTTPException(status_code=404, detail="conversation not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+        _ensure_conversation_owner(conversation, current_user)
     else:
-        conversation = container.conversations.create(title=request.query[:24])
+        conversation = container.conversations.create(title=request.query[:24], owner_id=current_user.id)
 
     user_message = Message(role=MessageRole.user, content=request.query)
     container.conversations.append_message(conversation.id, user_message)
@@ -367,14 +437,18 @@ def chat(request: ChatRequest) -> ChatResponse:
 
 
 @app.post("/chat/stream")
-def chat_stream(request: ChatRequest):
+def chat_stream(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user),
+):
     container = get_container()
     if request.conversation_id:
         conversation = container.conversations.get(request.conversation_id)
         if conversation is None:
-            raise HTTPException(status_code=404, detail="conversation not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+        _ensure_conversation_owner(conversation, current_user)
     else:
-        conversation = container.conversations.create(title=request.query[:24])
+        conversation = container.conversations.create(title=request.query[:24], owner_id=current_user.id)
 
     user_message = Message(role=MessageRole.user, content=request.query)
     container.conversations.append_message(conversation.id, user_message)
@@ -391,16 +465,21 @@ def chat_stream(request: ChatRequest):
 
 
 @app.get("/tasks/{task_id}", response_model=dict)
-def get_task(task_id: str) -> dict:
+def get_task(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
     container = get_container()
     task = container.tasks.get(task_id)
     if task is None:
-        raise HTTPException(status_code=404, detail="task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task not found")
+    _ensure_task_owner(task, current_user)
     return {"task": task}
 
 
 @app.post("/evaluate/run", response_model=EvaluationResponse)
-def run_evaluation() -> EvaluationResponse:
+def run_evaluation(current_user: User = Depends(get_current_user)) -> EvaluationResponse:
+    _require_admin(current_user)
     container = get_container()
-    service = EvaluationService(container.agent_service, container.conversations)
+    service = EvaluationService(container.agent_service, container.conversations, current_user.id)
     return EvaluationResponse(run=service.run())

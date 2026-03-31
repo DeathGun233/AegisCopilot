@@ -10,9 +10,10 @@ from .agent import AgentService
 
 
 class EvaluationService:
-    def __init__(self, agent: AgentService, conversations: ConversationRepository) -> None:
+    def __init__(self, agent: AgentService, conversations: ConversationRepository, owner_id: str) -> None:
         self.agent = agent
         self.conversations = conversations
+        self.owner_id = owner_id
 
     def run(self) -> EvaluationRun:
         dataset_path = Path(__file__).resolve().parents[3] / "evaluation" / "sample_qa.json"
@@ -24,7 +25,7 @@ class EvaluationService:
         keyword_hit = 0
 
         for case in cases:
-            conversation = self.conversations.create(title=case.question[:24])
+            conversation = self.conversations.create(title=case.question[:24], owner_id=self.owner_id)
             self.conversations.append_message(
                 conversation.id,
                 Message(role=MessageRole.user, content=case.question),
