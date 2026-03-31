@@ -4,6 +4,7 @@ from ..config import settings
 from ..models import SystemStats, User, UserRole
 from ..repositories import ConversationRepository, DocumentRepository, TaskRepository
 from .runtime_models import RuntimeModelService
+from .runtime_retrieval import RuntimeRetrievalService
 
 
 class SystemService:
@@ -13,14 +14,17 @@ class SystemService:
         documents: DocumentRepository,
         tasks: TaskRepository,
         runtime_models: RuntimeModelService,
+        runtime_retrieval: RuntimeRetrievalService,
     ) -> None:
         self.conversations = conversations
         self.documents = documents
         self.tasks = tasks
         self.runtime_models = runtime_models
+        self.runtime_retrieval = runtime_retrieval
 
     def get_stats(self, user: User) -> SystemStats:
         runtime = self.runtime_models.get_runtime()
+        retrieval = self.runtime_retrieval.get_settings()
         conversation_count = (
             len(self.conversations.list())
             if user.role == UserRole.admin
@@ -32,7 +36,9 @@ class SystemService:
             indexed_chunks=len(self.documents.list_chunks()),
             conversations=conversation_count,
             tasks=task_count,
-            retrieval_top_k=settings.default_retrieval_top_k,
+            retrieval_top_k=retrieval.top_k,
+            retrieval_candidate_k=retrieval.candidate_k,
+            retrieval_strategy=retrieval.strategy.value,
             grounding_threshold=settings.min_grounding_score,
             llm_provider=str(runtime["provider"]),
             llm_model=str(runtime["model"]),

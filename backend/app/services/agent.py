@@ -58,7 +58,7 @@ class AgentService:
         self._detect_intent(context)
         yield {"type": "status", "message": "正在识别问题意图..."}
         self._retrieve_context(context)
-        yield {"type": "status", "message": "正在检索知识库..."}
+        yield {"type": "status", "message": "正在执行混合检索..."}
         self._plan_response(context)
         yield {"type": "status", "message": "正在生成回答..."}
 
@@ -127,13 +127,13 @@ class AgentService:
         compact_query = raw_query.replace(" ", "")
         if any(word in compact_query for word in ["compare", "summary", "summarize", "对比", "总结", "整理"]):
             context.intent = Intent.task
-            context.route_reason = "识别到总结或对比类问题。"
+            context.route_reason = "识别为总结、整理或对比类问题。"
         elif any(word in compact_query for word in ["hello", "hi", "你好", "在吗"]):
             context.intent = Intent.chitchat
-            context.route_reason = "识别到问候语。"
+            context.route_reason = "识别为寒暄类问题。"
         else:
             context.intent = Intent.knowledge_qa
-            context.route_reason = "默认按知识库问答处理。"
+            context.route_reason = "默认走知识库问答链路。"
         context.trace.append(
             {
                 "step": WorkflowStep.intent_detect,
@@ -145,13 +145,39 @@ class AgentService:
     def _retrieve_context(self, context: WorkflowContext) -> None:
         if context.intent == Intent.chitchat:
             context.retrieval_results = []
-        else:
-            context.retrieval_results = self.tools.knowledge_search(context.query)
+            retrieval_settings = self.retrieval.get_runtime_settings()
+            context.trace.append(
+                {
+                    "step": WorkflowStep.retrieve_context,
+                    "hits": 0,
+                    "strategy": retrieval_settings.strategy.value,
+                    "top_k": retrieval_settings.top_k,
+                    "candidate_k": retrieval_settings.candidate_k,
+                    "sources": [],
+                }
+            )
+            return
+
+        context.retrieval_results = self.tools.knowledge_search(context.query)
+        retrieval_settings = self.retrieval.get_runtime_settings()
         context.trace.append(
             {
                 "step": WorkflowStep.retrieve_context,
                 "hits": len(context.retrieval_results),
+                "strategy": retrieval_settings.strategy.value,
+                "top_k": retrieval_settings.top_k,
+                "candidate_k": retrieval_settings.candidate_k,
                 "sources": [item.source for item in context.retrieval_results],
+                "score_preview": [
+                    {
+                        "source": item.display_source,
+                        "score": item.score,
+                        "keyword_score": item.keyword_score,
+                        "semantic_score": item.semantic_score,
+                        "rerank_score": item.rerank_score,
+                    }
+                    for item in context.retrieval_results[:4]
+                ],
             }
         )
 
@@ -191,7 +217,7 @@ class AgentService:
         context.grounded = score >= settings.min_grounding_score or context.intent == Intent.chitchat
         if not context.grounded and context.intent != Intent.chitchat:
             context.answer = (
-                "我检索到少量相关内容，但证据还不足以支撑可靠结论。"
+                "我检索到少量相关内容，但证据还不足以支持可靠结论。"
                 "建议进一步缩小问题范围，或者补充更多内部资料。"
             )
         context.trace.append(
@@ -217,9 +243,9 @@ class AgentService:
         if not results:
             return []
         top_score = results[0].score
-        threshold = max(settings.min_grounding_score, top_score * 0.6)
+        threshold = max(settings.min_grounding_score, top_score * 0.65)
         filtered = [item for item in results if item.score >= threshold]
-        return filtered[:2] or results[:1]
+        return filtered[:3] or results[:1]
 
     @staticmethod
     def _greeting_answer() -> str:
@@ -227,4 +253,4 @@ class AgentService:
 
     @staticmethod
     def _insufficient_evidence_answer() -> str:
-        return "当前知识库里还没有足够证据支撑这个问题的回答。"
+        return "当前知识库里还没有足够证据支持这个问题的回答。"

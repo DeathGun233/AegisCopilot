@@ -57,6 +57,10 @@ class DocumentTaskStatus(str, Enum):
     failed = "failed"
 
 
+class RetrievalStrategy(str, Enum):
+    hybrid = "hybrid"
+
+
 class Message(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     role: MessageRole
@@ -108,6 +112,21 @@ class RetrievalResult(BaseModel):
     score: float
     source: str
     display_source: str = ""
+    retrieval_method: str = "hybrid"
+    keyword_score: float = 0.0
+    semantic_score: float = 0.0
+    rerank_score: float = 0.0
+    coverage_score: float = 0.0
+
+
+class RetrievalSettings(BaseModel):
+    strategy: RetrievalStrategy = RetrievalStrategy.hybrid
+    top_k: int = 5
+    candidate_k: int = 12
+    keyword_weight: float = 0.55
+    semantic_weight: float = 0.45
+    rerank_weight: float = 0.6
+    min_score: float = 0.08
 
 
 class ModelOption(BaseModel):
@@ -194,6 +213,8 @@ class SystemStats(BaseModel):
     conversations: int
     tasks: int
     retrieval_top_k: int
+    retrieval_candidate_k: int
+    retrieval_strategy: str
     grounding_threshold: float
     llm_provider: str
     llm_model: str

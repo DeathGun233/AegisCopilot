@@ -23,6 +23,7 @@ from .services.extraction import ExtractionService
 from .services.generation_service import GenerationService
 from .services.retrieval import RetrievalService
 from .services.runtime_models import RuntimeModelService
+from .services.runtime_retrieval import RuntimeRetrievalService
 from .services.system import SystemService
 from .services.tools import ToolService
 from .services.users import UserService
@@ -40,9 +41,10 @@ class Container:
         self.users = UserRepository(JsonStore(storage / "users.json"))
         self.sessions = SessionRepository(JsonStore(storage / "sessions.json"))
         self.tasks = TaskRepository(JsonStore(storage / "tasks.json"))
+        self.runtime_retrieval_service = RuntimeRetrievalService(storage / "runtime_retrieval.json")
         self.document_service = DocumentService(self.documents, self.document_tasks)
         self.extraction_service = ExtractionService()
-        self.retrieval_service = RetrievalService(self.documents)
+        self.retrieval_service = RetrievalService(self.documents, self.runtime_retrieval_service)
         self.tool_service = ToolService(self.retrieval_service)
         self.runtime_model_service = RuntimeModelService(storage / "runtime_model.json")
         self.user_service = UserService(self.users)
@@ -59,6 +61,7 @@ class Container:
             self.documents,
             self.tasks,
             self.runtime_model_service,
+            self.runtime_retrieval_service,
         )
 
 

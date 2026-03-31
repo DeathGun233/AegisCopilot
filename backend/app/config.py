@@ -20,6 +20,11 @@ class Settings(BaseModel):
     reports_dir: Path = Field(default=Path(__file__).resolve().parents[2] / "backend" / "storage" / "reports")
     max_history_messages: int = 8
     default_retrieval_top_k: int = int(os.getenv("AEGIS_TOP_K", "5"))
+    default_retrieval_candidate_k: int = int(os.getenv("AEGIS_RETRIEVAL_CANDIDATE_K", "12"))
+    default_keyword_weight: float = float(os.getenv("AEGIS_KEYWORD_WEIGHT", "0.55"))
+    default_semantic_weight: float = float(os.getenv("AEGIS_SEMANTIC_WEIGHT", "0.45"))
+    default_rerank_weight: float = float(os.getenv("AEGIS_RERANK_WEIGHT", "0.6"))
+    default_retrieval_min_score: float = float(os.getenv("AEGIS_RETRIEVAL_MIN_SCORE", "0.08"))
     min_grounding_score: float = float(os.getenv("AEGIS_MIN_GROUNDING_SCORE", "0.18"))
     llm_provider: str = os.getenv(
         "AEGIS_LLM_PROVIDER",

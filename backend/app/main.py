@@ -27,6 +27,8 @@ from .api_schemas import (
     ReindexResponse,
     RetrievalPreviewRequest,
     RetrievalPreviewResponse,
+    RetrievalSettingsResponse,
+    RetrievalSettingsUpdateRequest,
     SystemStatsResponse,
     UserListResponse,
 )
@@ -40,6 +42,7 @@ from .models import (
     DocumentTaskStatus,
     Message,
     MessageRole,
+    RetrievalSettings,
     User,
     UserRole,
 )
@@ -144,7 +147,6 @@ def _build_task_summary(task: DocumentTask | None) -> DocumentTaskSummary | None
 def _build_document_summary(document: Document, chunk_count: int, task: DocumentTask | None = None) -> DocumentSummary:
     indexed = document.index_state == DocumentIndexState.indexed and bool(document.indexed_at)
     preview = normalize_text(document.content)[:160]
-    index_label = _friendly_index_state(document.index_state)
     if document.index_state == DocumentIndexState.indexed:
         indexed_label = f"已索引，共 {chunk_count} 个片段"
     elif document.index_state == DocumentIndexState.failed and document.last_index_error:
@@ -158,7 +160,7 @@ def _build_document_summary(document: Document, chunk_count: int, task: Document
         **document.model_dump(mode="json"),
         chunk_count=chunk_count,
         indexed=indexed,
-        index_state_label=index_label,
+        index_state_label=_friendly_index_state(document.index_state),
         indexed_label=indexed_label,
         source_label=f"{_friendly_source_type(document.source_type)} / {document.department}",
         tag_count=len(document.tags),
@@ -315,6 +317,26 @@ def select_model(
     return ModelCatalogResponse(catalog=catalog)
 
 
+@app.get("/retrieval/settings", response_model=RetrievalSettingsResponse)
+def get_retrieval_settings(current_user: User = Depends(get_current_user)) -> RetrievalSettingsResponse:
+    container = get_container()
+    return RetrievalSettingsResponse(settings=container.retrieval_service.get_runtime_settings())
+
+
+@app.post("/retrieval/settings", response_model=RetrievalSettingsResponse)
+def update_retrieval_settings(
+    request: RetrievalSettingsUpdateRequest,
+    current_user: User = Depends(get_current_user),
+) -> RetrievalSettingsResponse:
+    _require_admin(current_user)
+    container = get_container()
+    try:
+        retrieval_settings = container.retrieval_service.update_runtime_settings(**request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return RetrievalSettingsResponse(settings=retrieval_settings)
+
+
 @app.get("/conversations", response_model=ConversationListResponse)
 def list_conversations(current_user: User = Depends(get_current_user)) -> ConversationListResponse:
     container = get_container()
@@ -409,9 +431,7 @@ def get_document(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
 
     chunk_count = container.documents.count_chunks_for_document(document_id)
-    latest_task = (
-        container.document_tasks.get(document.last_task_id) if document.last_task_id else None
-    )
+    latest_task = container.document_tasks.get(document.last_task_id) if document.last_task_id else None
     summary = _build_document_summary(document, chunk_count, latest_task)
     chunks = [
         {

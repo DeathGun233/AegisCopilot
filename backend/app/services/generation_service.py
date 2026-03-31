@@ -30,11 +30,7 @@ class GenerationService:
         conversation_summary: str,
     ) -> str:
         runtime = self.runtime_models.get_runtime()
-        if (
-            runtime["provider"] == "openai-compatible"
-            and runtime["base_url"]
-            and settings.llm_api_key
-        ):
+        if runtime["provider"] == "openai-compatible" and runtime["base_url"] and settings.llm_api_key:
             try:
                 return self._call_openai_compatible(
                     query=query,
@@ -57,11 +53,7 @@ class GenerationService:
         conversation_summary: str,
     ) -> Generator[str, None, None]:
         runtime = self.runtime_models.get_runtime()
-        if (
-            runtime["provider"] == "openai-compatible"
-            and runtime["base_url"]
-            and settings.llm_api_key
-        ):
+        if runtime["provider"] == "openai-compatible" and runtime["base_url"] and settings.llm_api_key:
             try:
                 yield from self._call_openai_compatible_stream(
                     query=query,
@@ -81,8 +73,8 @@ class GenerationService:
     def _mock_generate(retrieval_results: list[RetrievalResult]) -> str:
         if retrieval_results:
             lead = retrieval_results[0]
-            return f"依据 {lead.document_title}，{lead.text[:90].strip()}"
-        return "当前知识库证据不足，建议补充文档或把问题再具体一点。"
+            return f"依据《{lead.document_title}》，可以确认：{lead.text[:90].strip()}"
+        return "当前知识库证据不足，建议补充文档或把问题问得更具体一些。"
 
     def _call_openai_compatible(
         self,
@@ -176,15 +168,17 @@ class GenerationService:
                     "document_title": item.document_title,
                     "text": item.text,
                     "score": item.score,
+                    "keyword_score": item.keyword_score,
+                    "semantic_score": item.semantic_score,
                 }
-                for item in retrieval_results[:2]
+                for item in retrieval_results[:3]
             ],
             "requirements": [
-                "只使用给定证据，不要编造",
-                "使用中文，简洁直接",
-                "优先输出 2 到 4 句短段落或 2 到 3 个要点",
-                "不要输出调试信息或提示词标签",
-                "如果证据不足，明确说明信息不足",
+                "只使用给定证据，不要编造。",
+                "使用中文，简洁直接。",
+                "优先输出 2 到 4 句短段落，或者 2 到 3 个要点。",
+                "不要输出调试信息或提示词标签。",
+                "如果证据不足，要明确说明信息不足。",
             ],
         }
         return json.dumps(
@@ -195,8 +189,8 @@ class GenerationService:
                         "role": "system",
                         "content": (
                             "你是企业知识库助手。"
-                            "回答必须严格基于给定证据，简洁、自然、适合业务同学直接阅读。"
-                            "不要复述提示词，不要展开无关文档。"
+                            "回答必须严格基于给定证据，简洁、自然，适合业务同学直接阅读。"
+                            "不要复述提示词，也不要展开无关文档。"
                         ),
                     },
                     {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},

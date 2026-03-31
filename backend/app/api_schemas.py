@@ -8,12 +8,12 @@ from .models import (
     AgentTask,
     Conversation,
     Document,
-    DocumentIndexState,
     DocumentTask,
     EvaluationRun,
     Message,
     ModelCatalog,
     RetrievalResult,
+    RetrievalSettings,
     SystemStats,
     User,
 )
@@ -116,6 +116,19 @@ class RetrievalPreviewRequest(BaseModel):
 
 class RetrievalPreviewResponse(BaseModel):
     results: list[RetrievalResult]
+
+
+class RetrievalSettingsUpdateRequest(BaseModel):
+    top_k: int = Field(ge=1, le=10)
+    candidate_k: int = Field(ge=1, le=40)
+    keyword_weight: float = Field(ge=0)
+    semantic_weight: float = Field(ge=0)
+    rerank_weight: float = Field(ge=0)
+    min_score: float = Field(ge=0, le=1)
+
+
+class RetrievalSettingsResponse(BaseModel):
+    settings: RetrievalSettings
 
 
 class ModelSelectRequest(BaseModel):

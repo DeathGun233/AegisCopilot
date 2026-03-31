@@ -341,13 +341,20 @@ a {
 .search-card input,
 .identity-switch select,
 .toolbar-field select,
+.toolbar-field input,
 .filter-bar input,
-.filter-bar select {
+.filter-bar select,
+.dashboard-preview-textarea {
   width: 100%;
   border-radius: 14px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   padding: 12px 14px;
   background: rgba(248, 250, 252, 0.88);
+}
+
+.dashboard-preview-textarea {
+  resize: vertical;
+  min-height: 96px;
 }
 
 .conversation-pane {

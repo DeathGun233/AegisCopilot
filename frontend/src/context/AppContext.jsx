@@ -248,6 +248,31 @@ export function AppProvider({ children }) {
     return fetchJson(`/documents/upload/tasks/${taskId}`);
   }
 
+  async function fetchRetrievalSettings() {
+    const data = await fetchJson("/retrieval/settings");
+    return data.settings;
+  }
+
+  async function updateRetrievalSettings(payload) {
+    const data = await fetchJson("/retrieval/settings", {
+      method: "POST",
+      body: payload,
+    });
+    await refreshStats();
+    return data.settings;
+  }
+
+  async function previewRetrieval(query, topK) {
+    const data = await fetchJson("/retrieval/preview", {
+      method: "POST",
+      body: {
+        query,
+        top_k: topK || null,
+      },
+    });
+    return data.results;
+  }
+
   async function selectModel(modelId) {
     const data = await fetchJson("/models/select", {
       method: "POST",
@@ -282,6 +307,7 @@ export function AppProvider({ children }) {
         evaluationRun,
         fetchDocument,
         fetchDocumentStatus,
+        fetchRetrievalSettings,
         fetchUploadTask,
         globalNotice,
         isAdmin,
@@ -289,6 +315,7 @@ export function AppProvider({ children }) {
         login,
         logout,
         modelCatalog,
+        previewRetrieval,
         queryDocuments,
         refreshApp,
         refreshConversations,
@@ -300,6 +327,7 @@ export function AppProvider({ children }) {
         selectModel,
         setGlobalNotice,
         stats,
+        updateRetrievalSettings,
         uploadDocumentFile,
         users,
       }}
