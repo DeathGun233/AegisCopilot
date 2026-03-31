@@ -11,10 +11,12 @@ from .models import (
     Chunk,
     Conversation,
     Document,
+    DocumentIndexState,
     DocumentTask,
     Message,
     User,
     UserRole,
+    utc_now,
 )
 
 
@@ -79,6 +81,7 @@ class DocumentRepository:
     def __init__(self, documents_store: JsonStore | None = None, chunks_store: JsonStore | None = None) -> None:
         self._documents: OrderedDict[str, Document] = OrderedDict()
         self._chunks: OrderedDict[str, Chunk] = OrderedDict()
+        self._documents_dirty = False
         self.documents_store = documents_store
         self.chunks_store = chunks_store
         if self.documents_store:
@@ -89,6 +92,9 @@ class DocumentRepository:
             for record in self.chunks_store.load():
                 chunk = Chunk.model_validate(record)
                 self._chunks[chunk.id] = chunk
+        self._reconcile_document_index_state()
+        if self._documents_dirty:
+            self._persist_documents()
 
     def upsert_document(self, document: Document) -> Document:
         self._documents[document.id] = document
@@ -131,6 +137,30 @@ class DocumentRepository:
 
     def count_chunks_for_document(self, document_id: str) -> int:
         return sum(1 for chunk in self._chunks.values() if chunk.document_id == document_id)
+
+    def _reconcile_document_index_state(self) -> None:
+        chunk_counts: dict[str, int] = {}
+        for chunk in self._chunks.values():
+            chunk_counts[chunk.document_id] = chunk_counts.get(chunk.document_id, 0) + 1
+
+        for document in self._documents.values():
+            chunk_count = chunk_counts.get(document.id, 0)
+            normalized_state = self._normalized_index_state(document, chunk_count)
+            if normalized_state != document.index_state:
+                document.index_state = normalized_state
+                if normalized_state == DocumentIndexState.indexed and document.updated_at < (document.indexed_at or document.updated_at):
+                    document.updated_at = document.indexed_at or utc_now()
+                self._documents_dirty = True
+
+    @staticmethod
+    def _normalized_index_state(document: Document, chunk_count: int) -> DocumentIndexState:
+        if document.index_state == DocumentIndexState.failed:
+            return DocumentIndexState.failed
+        if chunk_count > 0 and document.indexed_at is not None:
+            return DocumentIndexState.indexed
+        if chunk_count > 0 and document.index_state == DocumentIndexState.indexing:
+            return DocumentIndexState.indexing
+        return DocumentIndexState.pending
 
     def _persist_documents(self) -> None:
         if self.documents_store:
