@@ -40,7 +40,21 @@ class UserRole(str, Enum):
 
 class DocumentIndexState(str, Enum):
     pending = "pending"
+    indexing = "indexing"
     indexed = "indexed"
+    failed = "failed"
+
+
+class DocumentTaskKind(str, Enum):
+    upload = "upload"
+    reindex = "reindex"
+
+
+class DocumentTaskStatus(str, Enum):
+    pending = "pending"
+    running = "running"
+    succeeded = "succeeded"
+    failed = "failed"
 
 
 class Message(BaseModel):
@@ -68,7 +82,12 @@ class Document(BaseModel):
     content: str
     tags: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
     indexed_at: datetime | None = None
+    index_state: DocumentIndexState = DocumentIndexState.pending
+    last_index_error: str = ""
+    last_task_id: str | None = None
+    last_upload_task_id: str | None = None
 
 
 class Chunk(BaseModel):
@@ -134,6 +153,22 @@ class AgentTask(BaseModel):
     route_reason: str = ""
     provider: str = "mock"
     created_at: datetime = Field(default_factory=utc_now)
+
+
+class DocumentTask(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    user_id: str = "admin"
+    document_id: str | None = None
+    document_title: str = ""
+    kind: DocumentTaskKind
+    status: DocumentTaskStatus = DocumentTaskStatus.pending
+    progress: int = 0
+    message: str = ""
+    error: str = ""
+    chunks_created: int = 0
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    completed_at: datetime | None = None
 
 
 class EvaluationCase(BaseModel):

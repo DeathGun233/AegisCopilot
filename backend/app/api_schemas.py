@@ -9,6 +9,7 @@ from .models import (
     Conversation,
     Document,
     DocumentIndexState,
+    DocumentTask,
     EvaluationRun,
     Message,
     ModelCatalog,
@@ -18,15 +19,20 @@ from .models import (
 )
 
 
+class DocumentTaskSummary(DocumentTask):
+    kind_label: str = ""
+    status_label: str = ""
+
+
 class DocumentSummary(Document):
     chunk_count: int = 0
     indexed: bool = False
-    index_state: DocumentIndexState = DocumentIndexState.pending
     index_state_label: str = "待索引"
     indexed_label: str = "未索引"
     source_label: str = ""
     tag_count: int = 0
     content_preview: str = ""
+    last_task: DocumentTaskSummary | None = None
 
 
 class ChunkSummary(BaseModel):
@@ -42,6 +48,28 @@ class ChunkSummary(BaseModel):
 class DocumentDetailResponse(BaseModel):
     document: DocumentSummary
     chunks: list[ChunkSummary] = Field(default_factory=list)
+    recent_tasks: list[DocumentTaskSummary] = Field(default_factory=list)
+
+
+class DocumentStatusResponse(BaseModel):
+    document: DocumentSummary
+    task: DocumentTaskSummary | None = None
+
+
+class DocumentTaskResponse(BaseModel):
+    task: DocumentTaskSummary
+
+
+class DocumentUploadResponse(BaseModel):
+    document: DocumentSummary
+    task: DocumentTaskSummary
+    chunks_created: int
+
+
+class ReindexResponse(BaseModel):
+    document: DocumentSummary
+    task: DocumentTaskSummary
+    chunks_created: int
 
 
 class ChatRequest(BaseModel):

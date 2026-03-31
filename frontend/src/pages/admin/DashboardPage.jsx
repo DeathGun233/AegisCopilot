@@ -7,9 +7,9 @@ export function DashboardPage() {
     <div className="admin-content">
       <section className="dashboard-hero">
         <div>
-          <span className="hero-pill">运营概览</span>
-          <h2>后台运行总览</h2>
-          <p>统一查看知识库、模型运行状态、用户角色和 Agent 执行情况。</p>
+          <span className="hero-pill">运营总览</span>
+          <h2>后台运行概览</h2>
+          <p>统一查看知识库规模、模型运行状态、用户角色和 Agent 任务情况。</p>
         </div>
       </section>
 
@@ -17,22 +17,22 @@ export function DashboardPage() {
         <article className="metric-card">
           <span>知识文档</span>
           <strong>{stats?.documents ?? 0}</strong>
-          <small>当前已录入知识库的文档总数。</small>
+          <small>当前已纳入知识库管理的文档总数。</small>
         </article>
         <article className="metric-card">
           <span>索引片段</span>
           <strong>{stats?.indexed_chunks ?? 0}</strong>
-          <small>当前可被检索层召回的 chunk 数量。</small>
+          <small>当前可被检索层召回的片段数量。</small>
         </article>
         <article className="metric-card">
           <span>会话数量</span>
           <strong>{stats?.conversations ?? 0}</strong>
-          <small>当前登录账号下的会话数量。</small>
+          <small>当前登录账号下的会话总数。</small>
         </article>
         <article className="metric-card">
           <span>任务数量</span>
           <strong>{stats?.tasks ?? 0}</strong>
-          <small>当前账号产生的 Agent 执行记录。</small>
+          <small>当前账号累计产生的 Agent 任务记录。</small>
         </article>
       </section>
 
@@ -49,7 +49,7 @@ export function DashboardPage() {
               <article key={document.id} className="chunk-card">
                 <strong>{document.title}</strong>
                 <p>
-                  {document.department} / {document.chunk_count || 0} 个片段
+                  {document.department} / {document.chunk_count || 0} 个片段 / {document.index_state_label}
                 </p>
               </article>
             ))}
@@ -60,7 +60,7 @@ export function DashboardPage() {
           <div className="panel-head">
             <div>
               <span className="panel-kicker">运行状态</span>
-              <h3>当前会话</h3>
+              <h3>当前环境</h3>
             </div>
           </div>
           <div className="definition-list">
@@ -69,7 +69,7 @@ export function DashboardPage() {
               <strong>{currentUser?.name || "-"}</strong>
             </div>
             <div>
-              <span>用户数</span>
+              <span>用户数量</span>
               <strong>{users.length}</strong>
             </div>
             <div>

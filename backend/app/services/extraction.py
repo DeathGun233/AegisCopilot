@@ -29,7 +29,7 @@ class ExtractionService:
             return self._extract_pdf(content)
         if suffix == ".docx":
             return self._extract_docx(content)
-        raise ExtractionError(f"Unsupported file type: {suffix or 'unknown'}")
+        raise ExtractionError(f"暂不支持的文件类型：{suffix or '未知类型'}")
 
     @staticmethod
     def _decode_text(content: bytes) -> str:
@@ -38,24 +38,24 @@ class ExtractionService:
                 return normalize_text(content.decode(encoding))
             except UnicodeDecodeError:
                 continue
-        raise ExtractionError("Unable to decode text file content")
+        raise ExtractionError("无法解码文本文件内容")
 
     @staticmethod
     def _extract_pdf(content: bytes) -> str:
         if PdfReader is None:
-            raise ExtractionError("PDF support requires pypdf to be installed")
+            raise ExtractionError("处理 PDF 需要先安装 pypdf")
         reader = PdfReader(BytesIO(content))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
         if not text.strip():
-            raise ExtractionError("PDF text extraction returned empty content")
+            raise ExtractionError("PDF 文本提取结果为空")
         return normalize_text(text)
 
     @staticmethod
     def _extract_docx(content: bytes) -> str:
         if DocxDocument is None:
-            raise ExtractionError("DOCX support requires python-docx to be installed")
+            raise ExtractionError("处理 DOCX 需要先安装 python-docx")
         document = DocxDocument(BytesIO(content))
         text = "\n".join(paragraph.text for paragraph in document.paragraphs if paragraph.text.strip())
         if not text.strip():
-            raise ExtractionError("DOCX text extraction returned empty content")
+            raise ExtractionError("DOCX 文本提取结果为空")
         return normalize_text(text)

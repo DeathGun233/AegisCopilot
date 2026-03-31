@@ -5,7 +5,17 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Iterable
 
-from .models import AgentTask, AuthSession, Chunk, Conversation, Document, Message, User, UserRole
+from .models import (
+    AgentTask,
+    AuthSession,
+    Chunk,
+    Conversation,
+    Document,
+    DocumentTask,
+    Message,
+    User,
+    UserRole,
+)
 
 
 class JsonStore:
@@ -129,6 +139,38 @@ class DocumentRepository:
     def _persist_chunks(self) -> None:
         if self.chunks_store:
             self.chunks_store.save([item.model_dump(mode="json") for item in self._chunks.values()])
+
+
+class DocumentTaskRepository:
+    def __init__(self, store: JsonStore | None = None) -> None:
+        self._store: OrderedDict[str, DocumentTask] = OrderedDict()
+        self.store = store
+        if self.store:
+            for record in self.store.load():
+                task = DocumentTask.model_validate(record)
+                self._store[task.id] = task
+
+    def save(self, task: DocumentTask) -> DocumentTask:
+        self._store[task.id] = task
+        self._persist()
+        return task
+
+    def get(self, task_id: str) -> DocumentTask | None:
+        return self._store.get(task_id)
+
+    def list(self) -> list[DocumentTask]:
+        return list(self._store.values())
+
+    def list_for_document(self, document_id: str, limit: int | None = None) -> list[DocumentTask]:
+        items = [item for item in self._store.values() if item.document_id == document_id]
+        items.sort(key=lambda item: item.updated_at, reverse=True)
+        if limit is not None and limit >= 0:
+            return items[:limit]
+        return items
+
+    def _persist(self) -> None:
+        if self.store:
+            self.store.save([item.model_dump(mode="json") for item in self._store.values()])
 
 
 class TaskRepository:

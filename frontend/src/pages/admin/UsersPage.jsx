@@ -10,7 +10,7 @@ export function UsersPage() {
         <div>
           <span className="hero-pill">用户管理</span>
           <h2>用户角色与访问权限</h2>
-          <p>展示真实账号目录和权限边界，而不是旧版前端角色切换演示。</p>
+          <p>展示真实账号目录和权限边界，而不是旧版前端切角色的演示方式。</p>
         </div>
       </section>
 

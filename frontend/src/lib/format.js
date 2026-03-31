@@ -12,7 +12,7 @@ export function formatDateTime(value) {
 
 export function getConversationPreview(conversation) {
   const latest = conversation?.messages?.[conversation.messages.length - 1];
-  return latest?.content || "从空白开始";
+  return latest?.content || "从空白对话开始";
 }
 
 export function truncate(text, length = 120) {

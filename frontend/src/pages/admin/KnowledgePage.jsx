@@ -1,63 +1,132 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "../../context/AppContext";
-import { truncate } from "../../lib/format";
+import { formatDateTime, truncate } from "../../lib/format";
+
+const emptyFilters = {
+  q: "",
+  department: "",
+  source_type: "",
+  index_state: "",
+  tag: "",
+  sort_by: "updated_desc",
+};
 
 function sourceLabel(document) {
-  const mapping = {
-    upload: "上传文件",
-    seed: "示例文档",
-    text: "手动录入",
-    pdf: "PDF",
-    docx: "Word",
-    markdown: "Markdown",
-  };
-  return mapping[document.source_type] || document.source_type;
+  return document.source_label?.split(" / ")[0] || document.source_type || "-";
 }
 
 export function KnowledgePage() {
   const navigate = useNavigate();
-  const { deleteDocument, documents, setGlobalNotice, uploadDocumentFile } = useAppContext();
-  const [keyword, setKeyword] = useState("");
-  const [busy, setBusy] = useState(false);
+  const {
+    deleteDocument,
+    documents,
+    queryDocuments,
+    reindexDocument,
+    setGlobalNotice,
+    uploadDocumentFile,
+  } = useAppContext();
+  const [filters, setFilters] = useState(emptyFilters);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyAction, setBusyAction] = useState("");
+  const [latestTask, setLatestTask] = useState(null);
 
-  const visibleDocuments = useMemo(() => {
-    const needle = keyword.trim().toLowerCase();
-    if (!needle) {
-      return documents;
+  const filterOptions = useMemo(() => {
+    const departments = [...new Set(documents.map((item) => item.department).filter(Boolean))].sort();
+    const sourceTypes = [...new Set(documents.map((item) => item.source_type).filter(Boolean))].sort();
+    const tags = [...new Set(documents.flatMap((item) => item.tags || []).filter(Boolean))].sort();
+    return { departments, sourceTypes, tags };
+  }, [documents]);
+
+  const summary = useMemo(() => {
+    const total = rows.length;
+    const indexed = rows.filter((item) => item.index_state === "indexed").length;
+    const failed = rows.filter((item) => item.index_state === "failed").length;
+    const pending = rows.filter((item) => item.index_state === "pending" || item.index_state === "indexing").length;
+    return { total, indexed, failed, pending };
+  }, [rows]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRows() {
+      setLoading(true);
+      try {
+        const data = await queryDocuments(filters);
+        if (!cancelled) {
+          setRows(data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setGlobalNotice(error.message || "知识库列表加载失败");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     }
-    return documents.filter((document) =>
-      [document.title, document.department, document.source_type, ...(document.tags || [])]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle),
-    );
-  }, [documents, keyword]);
+
+    loadRows();
+    return () => {
+      cancelled = true;
+    };
+  }, [filters, queryDocuments, setGlobalNotice]);
+
+  function updateFilter(key, value) {
+    setFilters((current) => ({ ...current, [key]: value }));
+  }
 
   async function handleUpload(event) {
     const file = event.target.files?.[0];
     if (!file) {
       return;
     }
-    setBusy(true);
+    setBusyAction(`upload:${file.name}`);
     setGlobalNotice(`正在导入 ${file.name}...`);
     try {
       const result = await uploadDocumentFile(file);
-      setGlobalNotice(`已导入 ${result.document.title}，新增 ${result.chunks_created} 个片段。`);
+      setLatestTask(result.task);
+      setRows(await queryDocuments(filters));
+      setGlobalNotice(`已导入《${result.document.title}》，生成 ${result.chunks_created} 个片段。`);
     } catch (error) {
       setGlobalNotice(error.message || "文档上传失败");
     } finally {
-      setBusy(false);
+      setBusyAction("");
       event.target.value = "";
     }
   }
 
-  async function handleDelete(documentId) {
+  async function handleReindex(document) {
+    setBusyAction(`reindex:${document.id}`);
+    setGlobalNotice(`正在为《${document.title}》重建索引...`);
     try {
-      await deleteDocument(documentId);
-      setGlobalNotice("文档已从知识库删除。");
+      const result = await reindexDocument(document.id);
+      setLatestTask(result.task);
+      setRows(await queryDocuments(filters));
+      setGlobalNotice(`《${document.title}》已完成重建索引，共 ${result.chunks_created} 个片段。`);
+    } catch (error) {
+      setGlobalNotice(error.message || "重建索引失败");
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  async function handleDelete(document) {
+    const confirmed = window.confirm(`确定要删除《${document.title}》吗？`);
+    if (!confirmed) {
+      return;
+    }
+    setBusyAction(`delete:${document.id}`);
+    try {
+      await deleteDocument(document.id);
+      setRows(await queryDocuments(filters));
+      setGlobalNotice(`《${document.title}》已从知识库删除。`);
     } catch (error) {
       setGlobalNotice(error.message || "文档删除失败");
+    } finally {
+      setBusyAction("");
     }
   }
 
@@ -65,62 +134,196 @@ export function KnowledgePage() {
     <div className="admin-content">
       <section className="dashboard-hero knowledge-hero">
         <div>
-          <span className="hero-pill">知识库</span>
-          <h2>知识管理</h2>
-          <p>支持上传文档、查看索引结果，并进入详情页检查 chunk 拆分情况。</p>
+          <span className="hero-pill">知识库治理</span>
+          <h2>知识库管理后台</h2>
+          <p>按部门、标签、来源和状态筛选文档，查看索引状态，并支持重建索引与文档排查。</p>
         </div>
 
         <div className="hero-actions">
           <label className="primary-action upload-button">
             上传文档
-            <input type="file" accept=".txt,.md,.markdown,.pdf,.docx" onChange={handleUpload} hidden disabled={busy} />
+            <input type="file" accept=".txt,.md,.markdown,.pdf,.docx" onChange={handleUpload} hidden />
           </label>
         </div>
       </section>
 
+      <section className="metric-grid knowledge-summary-grid">
+        <article className="metric-card">
+          <span>当前列表</span>
+          <strong>{summary.total}</strong>
+          <small>当前筛选条件下的文档数量。</small>
+        </article>
+        <article className="metric-card">
+          <span>已索引</span>
+          <strong>{summary.indexed}</strong>
+          <small>检索链路可直接使用的文档。</small>
+        </article>
+        <article className="metric-card">
+          <span>处理中</span>
+          <strong>{summary.pending}</strong>
+          <small>待索引或索引中的文档数量。</small>
+        </article>
+        <article className="metric-card">
+          <span>失败</span>
+          <strong>{summary.failed}</strong>
+          <small>需要排查的索引异常文档。</small>
+        </article>
+      </section>
+
+      {latestTask ? (
+        <section className="panel-card">
+          <div className="panel-head">
+            <div>
+              <span className="panel-kicker">最近任务</span>
+              <h3>{latestTask.kind_label}</h3>
+            </div>
+            <span className={`state-badge ${latestTask.status === "succeeded" ? "indexed" : "pending"}`}>
+              {latestTask.status_label}
+            </span>
+          </div>
+          <div className="definition-list compact">
+            <div>
+              <span>文档</span>
+              <strong>{latestTask.document_title || "-"}</strong>
+            </div>
+            <div>
+              <span>进度</span>
+              <strong>{latestTask.progress}%</strong>
+            </div>
+            <div>
+              <span>说明</span>
+              <strong>{latestTask.message || "-"}</strong>
+            </div>
+            <div>
+              <span>完成时间</span>
+              <strong>{latestTask.completed_at ? formatDateTime(latestTask.completed_at) : "-"}</strong>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section className="panel-card">
-        <div className="filter-bar filter-bar--single">
+        <div className="filter-bar filter-bar--knowledge">
           <input
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            placeholder="按标题、部门、来源或标签搜索"
+            value={filters.q}
+            onChange={(event) => updateFilter("q", event.target.value)}
+            placeholder="按标题、内容、部门或标签搜索"
           />
+
+          <select value={filters.department} onChange={(event) => updateFilter("department", event.target.value)}>
+            <option value="">全部部门</option>
+            {filterOptions.departments.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+
+          <select value={filters.source_type} onChange={(event) => updateFilter("source_type", event.target.value)}>
+            <option value="">全部来源</option>
+            {filterOptions.sourceTypes.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+
+          <select value={filters.index_state} onChange={(event) => updateFilter("index_state", event.target.value)}>
+            <option value="">全部状态</option>
+            <option value="pending">待索引</option>
+            <option value="indexing">索引中</option>
+            <option value="indexed">已索引</option>
+            <option value="failed">索引失败</option>
+          </select>
+
+          <select value={filters.tag} onChange={(event) => updateFilter("tag", event.target.value)}>
+            <option value="">全部标签</option>
+            {filterOptions.tags.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+
+          <select value={filters.sort_by} onChange={(event) => updateFilter("sort_by", event.target.value)}>
+            <option value="updated_desc">最近更新优先</option>
+            <option value="created_desc">最近创建优先</option>
+            <option value="title_asc">标题 A-Z</option>
+            <option value="title_desc">标题 Z-A</option>
+          </select>
         </div>
 
         <div className="data-table">
           <div className="data-table-head data-table-head--knowledge">
             <span>文档</span>
-            <span>部门</span>
             <span>来源</span>
             <span>状态</span>
+            <span>最近任务</span>
             <span>操作</span>
           </div>
 
-          {visibleDocuments.length ? (
-            visibleDocuments.map((document) => (
-              <article key={document.id} className="data-row data-row--knowledge">
-                <div>
-                  <strong>{document.title}</strong>
-                  <small>{truncate(document.content_preview || "", 72)}</small>
-                </div>
-                <span>{document.department}</span>
-                <span>{sourceLabel(document)}</span>
-                <span className={document.indexed ? "state-badge indexed" : "state-badge pending"}>
-                  {document.indexed ? `已索引 / ${document.chunk_count || 0} 个片段` : "待索引"}
-                </span>
-                <div className="inline-actions">
-                  <button type="button" className="text-link" onClick={() => navigate(`/admin/knowledge/${document.id}`)}>
-                    详情
-                  </button>
-                  <button type="button" className="danger-text" onClick={() => handleDelete(document.id)}>
-                    删除
-                  </button>
-                </div>
-              </article>
-            ))
-          ) : (
-            <div className="table-empty">当前筛选条件下没有匹配的文档。</div>
-          )}
+          {loading ? <div className="table-empty">正在加载知识库列表...</div> : null}
+
+          {!loading && rows.length
+            ? rows.map((document) => {
+                const reindexBusy = busyAction === `reindex:${document.id}`;
+                const deleteBusy = busyAction === `delete:${document.id}`;
+                return (
+                  <article key={document.id} className="data-row data-row--knowledge">
+                    <div>
+                      <strong>{document.title}</strong>
+                      <small>{truncate(document.content_preview || "", 72)}</small>
+                      <small>
+                        {document.department} / {document.version} / {document.tag_count || 0} 个标签
+                      </small>
+                    </div>
+                    <span>{sourceLabel(document)}</span>
+                    <div className="detail-stack compact-gap">
+                      <span
+                        className={`state-badge ${
+                          document.index_state === "indexed"
+                            ? "indexed"
+                            : document.index_state === "failed"
+                              ? "failed"
+                              : "pending"
+                        }`}
+                      >
+                        {document.index_state_label}
+                      </span>
+                      <small>{document.indexed_label}</small>
+                    </div>
+                    <div className="detail-stack compact-gap">
+                      <strong>{document.last_task?.kind_label || "暂无任务"}</strong>
+                      <small>{document.last_task?.status_label || "尚未执行"}</small>
+                      <small>{document.last_task?.updated_at ? formatDateTime(document.last_task.updated_at) : ""}</small>
+                    </div>
+                    <div className="inline-actions">
+                      <button type="button" className="text-link" onClick={() => navigate(`/admin/knowledge/${document.id}`)}>
+                        详情
+                      </button>
+                      <button
+                        type="button"
+                        className="text-link"
+                        onClick={() => handleReindex(document)}
+                        disabled={reindexBusy}
+                      >
+                        {reindexBusy ? "重建中..." : "重建索引"}
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-text"
+                        onClick={() => handleDelete(document)}
+                        disabled={deleteBusy}
+                      >
+                        {deleteBusy ? "删除中..." : "删除"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })
+            : null}
+
+          {!loading && !rows.length ? <div className="table-empty">当前筛选条件下没有匹配的文档。</div> : null}
         </div>
       </section>
     </div>

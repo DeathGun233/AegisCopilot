@@ -7,7 +7,7 @@ export function MessageList({ messages, citationMap }) {
     return (
       <div className="empty-thread">
         <strong>从一个新问题开始</strong>
-        <p>系统会结合知识库内容和当前模型，给出更简洁的回答与引用依据。</p>
+        <p>系统会结合知识库内容和当前模型，给出更有依据的回答与引用。</p>
       </div>
     );
   }

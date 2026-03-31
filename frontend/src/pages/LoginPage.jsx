@@ -37,9 +37,7 @@ export function LoginPage() {
         <div className="auth-hero">
           <span className="hero-pill">AegisCopilot</span>
           <h1>登录工作台</h1>
-          <p>
-            第一波迁移版本已经把原来的前端角色切换，替换成真实登录态和管理员后台权限控制。
-          </p>
+          <p>这一版已经从前端切换身份的演示模式，升级为真实登录态和后台权限控制。</p>
         </div>
 
         <form className="auth-form" onSubmit={handleSubmit}>

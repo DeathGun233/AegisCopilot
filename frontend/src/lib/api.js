@@ -30,15 +30,15 @@ async function parseJson(response) {
     const raw = await response.text();
     try {
       const payload = JSON.parse(raw);
-      throw new Error(payload.detail || raw || `Request failed: ${response.status}`);
+      throw new Error(payload.detail || raw || `请求失败：${response.status}`);
     } catch (error) {
       if (error instanceof SyntaxError) {
         const text = (raw || "").trim();
         if (response.status === 404 && text === "Not Found") {
           if (response.url.endsWith("/auth/login")) {
-            throw new Error("登录接口不存在，请重启后端服务后再试");
+            throw new Error("登录接口不存在，请确认后端已经重启到最新版本。");
           }
-          throw new Error("未找到对应的接口或资源");
+          throw new Error("未找到对应的接口或资源。");
         }
         throw new Error(raw || `请求失败：${response.status}`);
       }
@@ -68,6 +68,18 @@ export async function fetchJson(path, { method = "GET", body, headers = {} } = {
 
   const response = await fetch(`${API_BASE}${path}`, init);
   return parseJson(response);
+}
+
+export function withQuery(path, params = {}) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+    search.set(key, String(value));
+  });
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
 }
 
 export async function uploadFile(path, file) {

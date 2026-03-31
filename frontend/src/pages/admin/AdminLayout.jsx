@@ -2,7 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useAppContext } from "../../context/AppContext";
 
 const adminTabs = [
-  { to: "/admin/overview", label: "概览" },
+  { to: "/admin/overview", label: "总览" },
   { to: "/admin/knowledge", label: "知识库" },
   { to: "/admin/evaluation", label: "评估" },
   { to: "/admin/users", label: "用户" },
@@ -15,7 +15,7 @@ export function AdminLayout() {
     <div className="page admin-page-shell">
       <header className="page-header admin-header">
         <div>
-          <span className="page-kicker">AegisCopilot / Admin</span>
+          <span className="page-kicker">AegisCopilot / 后台</span>
           <h1>管理后台</h1>
         </div>
 

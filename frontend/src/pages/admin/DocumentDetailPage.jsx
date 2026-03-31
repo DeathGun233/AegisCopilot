@@ -4,24 +4,17 @@ import { useAppContext } from "../../context/AppContext";
 import { formatDateTime, truncate } from "../../lib/format";
 
 function sourceLabel(document) {
-  const mapping = {
-    upload: "上传文件",
-    seed: "示例文档",
-    text: "手动录入",
-    pdf: "PDF",
-    docx: "Word",
-    markdown: "Markdown",
-  };
-  return mapping[document?.source_type] || document?.source_type || "-";
+  return document?.source_label?.split(" / ")[0] || document?.source_type || "-";
 }
 
 export function DocumentDetailPage() {
   const { documentId } = useParams();
   const navigate = useNavigate();
-  const { deleteDocument, fetchDocument, setGlobalNotice } = useAppContext();
+  const { deleteDocument, fetchDocument, reindexDocument, setGlobalNotice } = useAppContext();
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [busyAction, setBusyAction] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -51,31 +44,65 @@ export function DocumentDetailPage() {
     };
   }, [documentId, fetchDocument]);
 
+  async function reloadDetail() {
+    const data = await fetchDocument(documentId);
+    setDetail(data);
+    return data;
+  }
+
   async function handleDelete() {
+    const confirmed = window.confirm(`确定要删除《${detail?.document?.title || "当前文档"}》吗？`);
+    if (!confirmed) {
+      return;
+    }
+    setBusyAction("delete");
     try {
       await deleteDocument(documentId);
       setGlobalNotice("文档已从知识库删除。");
       navigate("/admin/knowledge", { replace: true });
     } catch (deleteError) {
       setGlobalNotice(deleteError.message || "文档删除失败");
+    } finally {
+      setBusyAction("");
     }
   }
+
+  async function handleReindex() {
+    if (!detail?.document) {
+      return;
+    }
+    setBusyAction("reindex");
+    try {
+      const result = await reindexDocument(documentId);
+      await reloadDetail();
+      setGlobalNotice(`《${detail.document.title}》已完成重建索引，共 ${result.chunks_created} 个片段。`);
+    } catch (reindexError) {
+      setGlobalNotice(reindexError.message || "重建索引失败");
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  const document = detail?.document;
 
   return (
     <div className="admin-content">
       <section className="dashboard-hero">
         <div>
           <span className="hero-pill">文档详情</span>
-          <h2>{detail?.document?.title || "正在加载文档"}</h2>
-          <p>查看原始内容和 chunk 拆分结果，辅助排查检索效果。</p>
+          <h2>{document?.title || "正在加载文档"}</h2>
+          <p>查看文档元信息、索引任务、原始内容预览和片段拆分结果，便于治理与排查。</p>
         </div>
 
         <div className="hero-actions">
           <Link className="secondary-action" to="/admin/knowledge">
             返回列表
           </Link>
-          <button type="button" className="danger-outline" onClick={handleDelete} disabled={!detail}>
-            删除文档
+          <button type="button" className="secondary-action" onClick={handleReindex} disabled={!detail || busyAction === "reindex"}>
+            {busyAction === "reindex" ? "重建中..." : "重建索引"}
+          </button>
+          <button type="button" className="danger-outline" onClick={handleDelete} disabled={!detail || busyAction === "delete"}>
+            {busyAction === "delete" ? "删除中..." : "删除文档"}
           </button>
         </div>
       </section>
@@ -84,54 +111,116 @@ export function DocumentDetailPage() {
       {error ? <section className="panel-card table-empty">{error}</section> : null}
 
       {detail ? (
-        <section className="admin-grid two-columns">
-          <article className="panel-card">
-            <div className="panel-head">
-              <div>
-                <span className="panel-kicker">元数据</span>
-                <h3>文档信息</h3>
-              </div>
-            </div>
+        <>
+          <section className="metric-grid knowledge-summary-grid">
+            <article className="metric-card">
+              <span>索引状态</span>
+              <strong>{document.index_state_label}</strong>
+              <small>{document.indexed_label}</small>
+            </article>
+            <article className="metric-card">
+              <span>片段数量</span>
+              <strong>{document.chunk_count}</strong>
+              <small>当前文档已写入的 chunk 数量。</small>
+            </article>
+            <article className="metric-card">
+              <span>最后更新</span>
+              <strong>{formatDateTime(document.updated_at) || "-"}</strong>
+              <small>文档治理信息的最近更新时间。</small>
+            </article>
+            <article className="metric-card">
+              <span>标签数量</span>
+              <strong>{document.tag_count}</strong>
+              <small>{document.tags?.join("、") || "暂无标签"}</small>
+            </article>
+          </section>
 
-            <div className="definition-list">
-              <div>
-                <span>部门</span>
-                <strong>{detail.document.department}</strong>
+          <section className="admin-grid two-columns">
+            <article className="panel-card">
+              <div className="panel-head">
+                <div>
+                  <span className="panel-kicker">元数据</span>
+                  <h3>文档信息</h3>
+                </div>
               </div>
-              <div>
-                <span>来源</span>
-                <strong>{sourceLabel(detail.document)}</strong>
+
+              <div className="definition-list">
+                <div>
+                  <span>部门</span>
+                  <strong>{document.department}</strong>
+                </div>
+                <div>
+                  <span>来源</span>
+                  <strong>{sourceLabel(document)}</strong>
+                </div>
+                <div>
+                  <span>版本</span>
+                  <strong>{document.version}</strong>
+                </div>
+                <div>
+                  <span>创建时间</span>
+                  <strong>{formatDateTime(document.created_at) || "-"}</strong>
+                </div>
+                <div>
+                  <span>索引时间</span>
+                  <strong>{document.indexed_at ? formatDateTime(document.indexed_at) : "-"}</strong>
+                </div>
+                <div>
+                  <span>最近错误</span>
+                  <strong>{document.last_index_error || "-"}</strong>
+                </div>
               </div>
-              <div>
-                <span>状态</span>
-                <strong>{detail.document.indexed ? "已索引" : "待索引"}</strong>
-              </div>
-              <div>
-                <span>索引时间</span>
-                <strong>{detail.document.indexed_at ? formatDateTime(detail.document.indexed_at) : "-"}</strong>
-              </div>
-              <div>
-                <span>版本</span>
-                <strong>{detail.document.version}</strong>
-              </div>
-              <div>
+
+              <div className="detail-block">
                 <span>标签</span>
-                <strong>{detail.document.tags?.join(", ") || "-"}</strong>
+                <p>{document.tags?.length ? document.tags.join("、") : "暂无标签"}</p>
               </div>
-            </div>
 
-            <div className="detail-block">
-              <span>原始内容预览</span>
-              <p>{truncate(detail.document.content || "", 800)}</p>
-            </div>
-          </article>
+              <div className="detail-block">
+                <span>原始内容预览</span>
+                <p>{truncate(document.content || "", 1200)}</p>
+              </div>
+            </article>
 
-          <article className="panel-card">
+            <article className="panel-card">
+              <div className="panel-head">
+                <div>
+                  <span className="panel-kicker">治理任务</span>
+                  <h3>最近任务记录</h3>
+                </div>
+              </div>
+
+              <div className="chunk-list">
+                {detail.recent_tasks.length ? (
+                  detail.recent_tasks.map((task) => (
+                    <article key={task.id} className="chunk-card">
+                      <strong>
+                        {task.kind_label} / {task.status_label}
+                      </strong>
+                      <p>
+                        进度 {task.progress}% · {task.message || "暂无说明"}
+                      </p>
+                      <small>
+                        更新时间 {formatDateTime(task.updated_at) || "-"}
+                        {task.chunks_created ? ` · 片段 ${task.chunks_created}` : ""}
+                      </small>
+                      {task.error ? <small>错误信息：{task.error}</small> : null}
+                    </article>
+                  ))
+                ) : (
+                  <div className="table-empty">当前文档还没有治理任务记录。</div>
+                )}
+              </div>
+            </article>
+          </section>
+
+          <section className="panel-card">
             <div className="panel-head">
               <div>
-                <span className="panel-kicker">片段</span>
-                <h3>Chunk 拆分</h3>
+                <span className="panel-kicker">片段拆分</span>
+                <h3>片段明细</h3>
               </div>
+              <small>{detail.chunks.length} 个片段</small>
             </div>
 
             <div className="chunk-list">
@@ -139,16 +228,17 @@ export function DocumentDetailPage() {
                 detail.chunks.map((chunk) => (
                   <article key={chunk.id} className="chunk-card">
                     <strong>片段 {chunk.chunk_index + 1}</strong>
-                    <small>{chunk.token_count} 个 token</small>
+                    <small>{chunk.token_count} 个词元</small>
                     <p>{chunk.text_preview}</p>
+                    <small>{chunk.metadata?.department || "-"} / {chunk.metadata?.version || "-"}</small>
                   </article>
                 ))
               ) : (
-                <div className="table-empty">当前文档尚未建立索引。</div>
+                <div className="table-empty">当前文档还没有可用索引片段。</div>
               )}
             </div>
-          </article>
-        </section>
+          </section>
+        </>
       ) : null}
     </div>
   );

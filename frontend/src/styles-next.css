@@ -666,6 +666,11 @@ a {
   color: #92400e;
 }
 
+.state-badge.failed {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
 .admin-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -733,6 +738,10 @@ a {
   grid-template-columns: 1fr;
 }
 
+.filter-bar--knowledge {
+  grid-template-columns: minmax(220px, 1.2fr) repeat(5, minmax(120px, 0.6fr));
+}
+
 .data-table {
   display: grid;
   gap: 12px;
@@ -772,6 +781,10 @@ a {
 .detail-stack {
   display: grid;
   gap: 18px;
+}
+
+.compact-gap {
+  gap: 6px;
 }
 
 .detail-block {

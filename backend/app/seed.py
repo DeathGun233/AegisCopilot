@@ -40,7 +40,7 @@ SAMPLE_DOCS = [
 def main() -> None:
     container = get_container()
     if container.document_service.list_documents():
-        print("Sample documents already loaded.")
+        print("示例文档已存在，跳过初始化。")
         return
     for item in SAMPLE_DOCS:
         document = container.document_service.create_document(
@@ -52,7 +52,7 @@ def main() -> None:
             tags=item["tags"],
         )
         container.document_service.index_document(document.id)
-    print("Seeded sample documents.")
+    print("已初始化示例文档。")
 
 
 if __name__ == "__main__":

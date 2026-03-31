@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from functools import lru_cache
-
 from pathlib import Path
 
 from fastapi import Header, HTTPException, status
@@ -11,6 +10,7 @@ from .models import User
 from .repositories import (
     ConversationRepository,
     DocumentRepository,
+    DocumentTaskRepository,
     JsonStore,
     SessionRepository,
     TaskRepository,
@@ -24,8 +24,8 @@ from .services.generation_service import GenerationService
 from .services.retrieval import RetrievalService
 from .services.runtime_models import RuntimeModelService
 from .services.system import SystemService
-from .services.users import UserService
 from .services.tools import ToolService
+from .services.users import UserService
 
 
 class Container:
@@ -36,10 +36,11 @@ class Container:
             JsonStore(storage / "documents.json"),
             JsonStore(storage / "chunks.json"),
         )
+        self.document_tasks = DocumentTaskRepository(JsonStore(storage / "document_tasks.json"))
         self.users = UserRepository(JsonStore(storage / "users.json"))
         self.sessions = SessionRepository(JsonStore(storage / "sessions.json"))
         self.tasks = TaskRepository(JsonStore(storage / "tasks.json"))
-        self.document_service = DocumentService(self.documents)
+        self.document_service = DocumentService(self.documents, self.document_tasks)
         self.extraction_service = ExtractionService()
         self.retrieval_service = RetrievalService(self.documents)
         self.tool_service = ToolService(self.retrieval_service)

@@ -12,7 +12,11 @@ from .api_schemas import (
     DocumentCreateRequest,
     DocumentDetailResponse,
     DocumentListResponse,
+    DocumentStatusResponse,
     DocumentSummary,
+    DocumentTaskResponse,
+    DocumentTaskSummary,
+    DocumentUploadResponse,
     EvaluationResponse,
     IndexResponse,
     LoginRequest,
@@ -20,6 +24,7 @@ from .api_schemas import (
     LogoutResponse,
     ModelCatalogResponse,
     ModelSelectRequest,
+    ReindexResponse,
     RetrievalPreviewRequest,
     RetrievalPreviewResponse,
     SystemStatsResponse,
@@ -27,7 +32,17 @@ from .api_schemas import (
 )
 from .config import settings
 from .deps import get_container, get_current_user
-from .models import Message, MessageRole, User, UserRole
+from .models import (
+    Document,
+    DocumentIndexState,
+    DocumentTask,
+    DocumentTaskKind,
+    DocumentTaskStatus,
+    Message,
+    MessageRole,
+    User,
+    UserRole,
+)
 from .seed import main as seed_sample_documents
 from .services.evaluation import EvaluationService
 from .services.extraction import ExtractionError
@@ -91,19 +106,64 @@ def _friendly_source_type(source_type: str) -> str:
     }.get(normalized, source_type.replace("_", " ").title())
 
 
-def _build_document_summary(document, chunk_count: int) -> DocumentSummary:
-    indexed = bool(document.indexed_at)
+def _friendly_index_state(index_state: DocumentIndexState) -> str:
+    return {
+        DocumentIndexState.pending: "待索引",
+        DocumentIndexState.indexing: "索引中",
+        DocumentIndexState.indexed: "已索引",
+        DocumentIndexState.failed: "索引失败",
+    }[index_state]
+
+
+def _friendly_task_kind(kind: DocumentTaskKind) -> str:
+    return {
+        DocumentTaskKind.upload: "上传入库",
+        DocumentTaskKind.reindex: "重建索引",
+    }[kind]
+
+
+def _friendly_task_status(status_value: DocumentTaskStatus) -> str:
+    return {
+        DocumentTaskStatus.pending: "等待中",
+        DocumentTaskStatus.running: "执行中",
+        DocumentTaskStatus.succeeded: "已完成",
+        DocumentTaskStatus.failed: "失败",
+    }[status_value]
+
+
+def _build_task_summary(task: DocumentTask | None) -> DocumentTaskSummary | None:
+    if task is None:
+        return None
+    return DocumentTaskSummary(
+        **task.model_dump(mode="json"),
+        kind_label=_friendly_task_kind(task.kind),
+        status_label=_friendly_task_status(task.status),
+    )
+
+
+def _build_document_summary(document: Document, chunk_count: int, task: DocumentTask | None = None) -> DocumentSummary:
+    indexed = document.index_state == DocumentIndexState.indexed and bool(document.indexed_at)
     preview = normalize_text(document.content)[:160]
+    index_label = _friendly_index_state(document.index_state)
+    if document.index_state == DocumentIndexState.indexed:
+        indexed_label = f"已索引，共 {chunk_count} 个片段"
+    elif document.index_state == DocumentIndexState.failed and document.last_index_error:
+        indexed_label = f"索引失败：{document.last_index_error}"
+    elif document.index_state == DocumentIndexState.indexing:
+        indexed_label = "索引任务进行中"
+    else:
+        indexed_label = "尚未建立索引"
+
     return DocumentSummary(
         **document.model_dump(mode="json"),
         chunk_count=chunk_count,
         indexed=indexed,
-        index_state="indexed" if indexed else "pending",
-        index_state_label="已索引" if indexed else "待索引",
-        indexed_label=f"已索引，共 {chunk_count} 个片段" if indexed else "未索引",
+        index_state_label=index_label,
+        indexed_label=indexed_label,
         source_label=f"{_friendly_source_type(document.source_type)} / {document.department}",
         tag_count=len(document.tags),
         content_preview=preview,
+        last_task=_build_task_summary(task),
     )
 
 
@@ -113,12 +173,15 @@ def _document_matches(
     query: str | None,
     department: str | None,
     source_type: str | None,
+    index_state: str | None,
     indexed: bool | None,
     tag: str | None,
 ) -> bool:
     if department and summary.department.lower() != department.strip().lower():
         return False
     if source_type and summary.source_type.lower() != source_type.strip().lower():
+        return False
+    if index_state and summary.index_state.value != index_state.strip().lower():
         return False
     if indexed is not None and summary.indexed != indexed:
         return False
@@ -135,6 +198,7 @@ def _document_matches(
                 summary.department,
                 summary.source_type,
                 summary.version,
+                summary.index_state.value,
                 " ".join(summary.tags),
             ]
         ).lower()
@@ -151,21 +215,39 @@ def _sort_documents(documents: list[DocumentSummary], sort_by: str) -> list[Docu
         return sorted(documents, key=lambda item: item.title.lower(), reverse=True)
     if key == "created_asc":
         return sorted(documents, key=lambda item: item.created_at)
-    return sorted(
-        documents,
-        key=lambda item: (item.indexed_at or item.created_at, item.title.lower()),
-        reverse=True,
-    )
+    if key == "created_desc":
+        return sorted(documents, key=lambda item: item.created_at, reverse=True)
+    return sorted(documents, key=lambda item: (item.updated_at, item.title.lower()), reverse=True)
 
 
 def _ensure_conversation_owner(conversation, current_user: User) -> None:
     if conversation.owner_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
 
 
 def _ensure_task_owner(task, current_user: User) -> None:
     if task.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="任务不存在")
+
+
+def _document_counts() -> dict[str, int]:
+    container = get_container()
+    counts: dict[str, int] = {}
+    for chunk in container.documents.list_chunks():
+        counts[chunk.document_id] = counts.get(chunk.document_id, 0) + 1
+    return counts
+
+
+def _document_task_map(documents: list[Document]) -> dict[str, DocumentTask]:
+    container = get_container()
+    task_map: dict[str, DocumentTask] = {}
+    for document in documents:
+        if not document.last_task_id:
+            continue
+        task = container.document_tasks.get(document.last_task_id)
+        if task is not None:
+            task_map[document.last_task_id] = task
+    return task_map
 
 
 @app.post("/auth/login", response_model=LoginResponse)
@@ -257,7 +339,7 @@ def get_conversation(
     container = get_container()
     conversation = container.conversations.get(conversation_id)
     if conversation is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
     _ensure_conversation_owner(conversation, current_user)
     return {"conversation": conversation}
 
@@ -270,7 +352,7 @@ def delete_conversation(
     container = get_container()
     conversation = container.conversations.get(conversation_id)
     if conversation is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
     _ensure_conversation_owner(conversation, current_user)
     container.conversations.delete(conversation_id)
     return {"deleted": True, "conversation_id": conversation_id}
@@ -281,6 +363,7 @@ def list_documents(
     q: str | None = None,
     department: str | None = None,
     source_type: str | None = None,
+    index_state: str | None = None,
     indexed: bool | None = None,
     tag: str | None = None,
     limit: int | None = None,
@@ -288,30 +371,31 @@ def list_documents(
     current_user: User = Depends(get_current_user),
 ) -> DocumentListResponse:
     container = get_container()
-    counts: dict[str, int] = {}
-    for chunk in container.documents.list_chunks():
-        counts[chunk.document_id] = counts.get(chunk.document_id, 0) + 1
+    documents = container.document_service.list_documents()
+    counts = _document_counts()
+    task_map = _document_task_map(documents)
 
-    documents = [
-        _build_document_summary(document, counts.get(document.id, 0))
-        for document in container.document_service.list_documents()
-    ]
-    documents = [
-        document
+    summaries = [
+        _build_document_summary(document, counts.get(document.id, 0), task_map.get(document.last_task_id or ""))
         for document in documents
+    ]
+    summaries = [
+        document
+        for document in summaries
         if _document_matches(
             document,
             query=q,
             department=department,
             source_type=source_type,
+            index_state=index_state,
             indexed=indexed,
             tag=tag,
         )
     ]
-    documents = _sort_documents(documents, sort_by)
+    summaries = _sort_documents(summaries, sort_by)
     if limit is not None and limit >= 0:
-        documents = documents[:limit]
-    return DocumentListResponse(documents=documents)
+        summaries = summaries[:limit]
+    return DocumentListResponse(documents=summaries)
 
 
 @app.get("/documents/{document_id}", response_model=DocumentDetailResponse)
@@ -322,23 +406,52 @@ def get_document(
     container = get_container()
     document = container.document_service.get_document(document_id)
     if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
 
     chunk_count = container.documents.count_chunks_for_document(document_id)
-    summary = _build_document_summary(document, chunk_count)
+    latest_task = (
+        container.document_tasks.get(document.last_task_id) if document.last_task_id else None
+    )
+    summary = _build_document_summary(document, chunk_count, latest_task)
     chunks = [
         {
             "id": chunk.id,
             "document_id": chunk.document_id,
             "document_title": chunk.document_title,
             "chunk_index": chunk.chunk_index,
-            "text_preview": normalize_text(chunk.text)[:180],
+            "text_preview": normalize_text(chunk.text)[:240],
             "token_count": len(chunk.tokens),
             "metadata": chunk.metadata,
         }
         for chunk in container.documents.list_chunks_for_document(document_id)
     ]
-    return DocumentDetailResponse(document=summary, chunks=chunks)
+    recent_tasks = [
+        _build_task_summary(task)
+        for task in container.document_service.list_document_tasks(document_id, limit=6)
+    ]
+    return DocumentDetailResponse(
+        document=summary,
+        chunks=chunks,
+        recent_tasks=[task for task in recent_tasks if task is not None],
+    )
+
+
+@app.get("/documents/{document_id}/status", response_model=DocumentStatusResponse)
+def get_document_status(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+) -> DocumentStatusResponse:
+    container = get_container()
+    document = container.document_service.get_document(document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
+    task = container.document_tasks.get(document.last_task_id) if document.last_task_id else None
+    summary = _build_document_summary(
+        document,
+        container.documents.count_chunks_for_document(document_id),
+        task,
+    )
+    return DocumentStatusResponse(document=summary, task=_build_task_summary(task))
 
 
 @app.post("/documents", response_model=dict)
@@ -349,7 +462,8 @@ def create_document(
     container = get_container()
     _require_admin(current_user)
     document = container.document_service.create_document(**request.model_dump())
-    return {"document": document}
+    summary = _build_document_summary(document, 0)
+    return {"document": summary}
 
 
 @app.delete("/documents/{document_id}", response_model=dict)
@@ -361,32 +475,71 @@ def delete_document(
     _require_admin(current_user)
     deleted = container.document_service.delete_document(document_id)
     if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
     return {"deleted": True, "document_id": document_id}
 
 
-@app.post("/documents/upload", response_model=dict)
+@app.post("/documents/upload", response_model=DocumentUploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-) -> dict:
+) -> DocumentUploadResponse:
     container = get_container()
     _require_admin(current_user)
     raw = await file.read()
+    filename = file.filename or "uploaded-file"
     try:
-        content = container.extraction_service.extract(file.filename or "uploaded-file", raw)
+        content = container.extraction_service.extract(filename, raw)
     except ExtractionError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    document = container.document_service.create_document(
-        title=file.filename or "uploaded-file",
+
+    document, task, chunks_created = container.document_service.import_document(
+        user_id=current_user.id,
+        title=filename,
         content=normalize_text(content),
         source_type="upload",
         department="general",
         version="v1",
         tags=[],
     )
-    chunks_created = container.document_service.index_document(document.id)
-    return {"document": document, "chunks_created": chunks_created}
+    summary = _build_document_summary(document, chunks_created, task)
+    return DocumentUploadResponse(
+        document=summary,
+        task=_build_task_summary(task),
+        chunks_created=chunks_created,
+    )
+
+
+@app.get("/documents/upload/tasks/{task_id}", response_model=DocumentTaskResponse)
+def get_upload_task(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+) -> DocumentTaskResponse:
+    _require_admin(current_user)
+    container = get_container()
+    task = container.document_service.get_document_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上传任务不存在")
+    return DocumentTaskResponse(task=_build_task_summary(task))
+
+
+@app.post("/documents/{document_id}/reindex", response_model=ReindexResponse)
+def reindex_document(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+) -> ReindexResponse:
+    container = get_container()
+    _require_admin(current_user)
+    try:
+        document, task, chunks_created = container.document_service.reindex_document(document_id, current_user.id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在") from exc
+    summary = _build_document_summary(document, chunks_created, task)
+    return ReindexResponse(
+        document=summary,
+        task=_build_task_summary(task),
+        chunks_created=chunks_created,
+    )
 
 
 @app.post("/documents/index", response_model=IndexResponse)
@@ -394,15 +547,15 @@ def index_document(
     payload: dict[str, str],
     current_user: User = Depends(get_current_user),
 ) -> IndexResponse:
-    container = get_container()
     _require_admin(current_user)
     document_id = payload.get("document_id")
     if not document_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="document_id is required")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="缺少 document_id")
+    container = get_container()
     try:
-        chunks_created = container.document_service.index_document(document_id)
+        _, _, chunks_created = container.document_service.reindex_document(document_id, current_user.id)
     except KeyError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found") from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在") from exc
     return IndexResponse(document_id=document_id, chunks_created=chunks_created)
 
 
@@ -424,7 +577,7 @@ def chat(
     if request.conversation_id:
         conversation = container.conversations.get(request.conversation_id)
         if conversation is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
         _ensure_conversation_owner(conversation, current_user)
     else:
         conversation = container.conversations.create(title=request.query[:24], owner_id=current_user.id)
@@ -445,7 +598,7 @@ def chat_stream(
     if request.conversation_id:
         conversation = container.conversations.get(request.conversation_id)
         if conversation is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
         _ensure_conversation_owner(conversation, current_user)
     else:
         conversation = container.conversations.create(title=request.query[:24], owner_id=current_user.id)
@@ -472,7 +625,7 @@ def get_task(
     container = get_container()
     task = container.tasks.get(task_id)
     if task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="任务不存在")
     _ensure_task_owner(task, current_user)
     return {"task": task}
 

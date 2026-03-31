@@ -64,7 +64,7 @@ function GuestOnly() {
   const { bootstrapping, isAuthenticated } = useAppContext();
 
   if (bootstrapping) {
-    return <FullScreenState title="正在加载工作台" message="正在准备登录页..." />;
+    return <FullScreenState title="正在加载工作台" message="正在准备登录页面..." />;
   }
 
   if (isAuthenticated) {

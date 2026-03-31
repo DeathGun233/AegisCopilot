@@ -5,6 +5,7 @@ import {
   getStoredAuthToken,
   setStoredAuthToken,
   uploadFile,
+  withQuery,
 } from "../lib/api";
 
 const AppContext = createContext(null);
@@ -53,6 +54,11 @@ export function AppProvider({ children }) {
     return data.documents;
   }
 
+  async function queryDocuments(params = {}) {
+    const data = await fetchJson(withQuery("/documents", params));
+    return data.documents;
+  }
+
   async function refreshStats() {
     const data = await fetchJson("/system/stats");
     setStats(data.stats);
@@ -73,8 +79,12 @@ export function AppProvider({ children }) {
     const meData = await fetchJson("/auth/me");
     setCurrentUser(meData.user);
 
-    const [statsData, modelsData] = await Promise.all([refreshStats(), fetchJson("/models")]);
-    const [documentsData, conversationsData] = await Promise.all([refreshDocuments(), refreshConversations()]);
+    const [statsData, modelsData, documentsData, conversationsData] = await Promise.all([
+      refreshStats(),
+      fetchJson("/models"),
+      refreshDocuments(),
+      refreshConversations(),
+    ]);
     setModelCatalog(modelsData.catalog);
     setStats(statsData);
 
@@ -167,7 +177,7 @@ export function AppProvider({ children }) {
         await fetchJson("/auth/logout", { method: "POST" });
       }
     } catch {
-      // Ignore logout failures and clear the local session anyway.
+      // 忽略退出失败，仍然清理本地登录态。
     } finally {
       clearStoredAuthToken();
       setAuthToken("");
@@ -209,6 +219,15 @@ export function AppProvider({ children }) {
     return data;
   }
 
+  async function reindexDocument(documentId) {
+    const data = await fetchJson(`/documents/${documentId}/reindex`, {
+      method: "POST",
+    });
+    await refreshDocuments();
+    await refreshStats();
+    return data;
+  }
+
   async function deleteDocument(documentId) {
     await fetchJson(`/documents/${documentId}`, {
       method: "DELETE",
@@ -219,6 +238,14 @@ export function AppProvider({ children }) {
 
   async function fetchDocument(documentId) {
     return fetchJson(`/documents/${documentId}`);
+  }
+
+  async function fetchDocumentStatus(documentId) {
+    return fetchJson(`/documents/${documentId}/status`);
+  }
+
+  async function fetchUploadTask(taskId) {
+    return fetchJson(`/documents/upload/tasks/${taskId}`);
   }
 
   async function selectModel(modelId) {
@@ -254,17 +281,21 @@ export function AppProvider({ children }) {
         documents,
         evaluationRun,
         fetchDocument,
+        fetchDocumentStatus,
+        fetchUploadTask,
         globalNotice,
         isAdmin,
         isAuthenticated,
         login,
         logout,
         modelCatalog,
+        queryDocuments,
         refreshApp,
         refreshConversations,
         refreshDocuments,
         refreshStats,
         refreshUsers,
+        reindexDocument,
         runEvaluation,
         selectModel,
         setGlobalNotice,

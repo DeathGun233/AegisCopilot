@@ -90,28 +90,31 @@ export function ChatPage() {
     let answer = "";
 
     try {
-      await streamChat({ query: trimmed, conversationId }, {
-        onConversation(payload) {
-          nextConversationId = payload.conversation_id;
+      await streamChat(
+        { query: trimmed, conversationId },
+        {
+          onConversation(payload) {
+            nextConversationId = payload.conversation_id;
+          },
+          onStatus(payload) {
+            setStreamStatus(payload.message);
+          },
+          onDelta(payload) {
+            answer += payload.content;
+            setMessages((current) =>
+              current.map((message) => (message.id === assistantId ? { ...message, content: answer } : message)),
+            );
+          },
+          onDone(payload) {
+            if (payload.task?.citations?.length) {
+              setCitationMap((current) => ({
+                ...current,
+                [assistantId]: payload.task.citations,
+              }));
+            }
+          },
         },
-        onStatus(payload) {
-          setStreamStatus(payload.message);
-        },
-        onDelta(payload) {
-          answer += payload.content;
-          setMessages((current) =>
-            current.map((message) => (message.id === assistantId ? { ...message, content: answer } : message)),
-          );
-        },
-        onDone(payload) {
-          if (payload.task?.citations?.length) {
-            setCitationMap((current) => ({
-              ...current,
-              [assistantId]: payload.task.citations,
-            }));
-          }
-        },
-      });
+      );
 
       const nextConversations = await refreshConversations();
       await refreshStats();
@@ -125,7 +128,7 @@ export function ChatPage() {
     } catch (error) {
       setMessages((current) =>
         current.map((message) =>
-            message.id === assistantId ? { ...message, content: "模型请求失败，请稍后重试。" } : message,
+          message.id === assistantId ? { ...message, content: "模型请求失败，请稍后重试。" } : message,
         ),
       );
       setStreamStatus(error.message || "模型请求失败");
@@ -138,7 +141,7 @@ export function ChatPage() {
     <div className="page chat-page">
       <header className="page-header">
         <div>
-          <span className="page-kicker">AegisCopilot / Chat</span>
+          <span className="page-kicker">AegisCopilot / 对话</span>
           <h1>{currentConversation?.title || "新对话"}</h1>
         </div>
       </header>
@@ -173,7 +176,7 @@ export function ChatPage() {
       <section className="thread-panel">
         <div className="panel-head">
           <div>
-            <span className="panel-kicker">Conversation</span>
+            <span className="panel-kicker">会话</span>
             <h3>会话内容</h3>
           </div>
           <span className={isStreaming ? "status-dot live" : "status-dot"}>流式输出</span>

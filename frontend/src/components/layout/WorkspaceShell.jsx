@@ -22,9 +22,9 @@ export function WorkspaceShell({ children }) {
   const [keyword, setKeyword] = useState("");
 
   const primaryNav = useMemo(() => {
-    const items = [{ to: "/chat", label: "聊天", hint: "基于知识库提问并发起问答流程" }];
+    const items = [{ to: "/chat", label: "聊天问答", hint: "基于知识库发起提问并获取带引用的回答" }];
     if (isAdmin) {
-      items.push({ to: "/admin/overview", label: "管理后台", hint: "管理知识库、用户与评估任务" });
+      items.push({ to: "/admin/overview", label: "管理后台", hint: "治理知识库、用户和评估任务" });
     }
     return items;
   }, [isAdmin]);
@@ -96,7 +96,7 @@ export function WorkspaceShell({ children }) {
           <button type="button" className="launch-button" onClick={handleCreateConversation}>
             <span className="launch-icon">+</span>
             <div>
-              <strong>新建对话</strong>
+              <strong>发起新对话</strong>
               <small>为新的业务问题或知识查询开启一条独立会话。</small>
             </div>
           </button>
@@ -112,7 +112,7 @@ export function WorkspaceShell({ children }) {
           <input
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
-            placeholder="搜索标题或消息内容"
+            placeholder="按标题或消息内容搜索"
           />
         </label>
 
@@ -150,7 +150,7 @@ export function WorkspaceShell({ children }) {
                 </article>
               ))
             ) : (
-              <div className="table-empty">还没有历史会话，可以先从上方新建一个。</div>
+              <div className="table-empty">还没有历史会话，可以先从上方创建一个。</div>
             )}
           </div>
         </section>
@@ -183,9 +183,9 @@ export function WorkspaceShell({ children }) {
 
           {stats ? (
             <div className="rail-stats">
-              <span>{stats.documents} docs</span>
-              <span>{stats.conversations} conversations</span>
-              <span>{stats.tasks} tasks</span>
+              <span>{stats.documents} 篇文档</span>
+              <span>{stats.conversations} 个会话</span>
+              <span>{stats.tasks} 条任务</span>
             </div>
           ) : null}
 
