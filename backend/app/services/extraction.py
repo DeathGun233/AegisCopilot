@@ -3,10 +3,17 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 
-from docx import Document as DocxDocument
-from pypdf import PdfReader
-
 from .text import normalize_text
+
+try:
+    from pypdf import PdfReader
+except ModuleNotFoundError:  # pragma: no cover - depends on local environment
+    PdfReader = None
+
+try:
+    from docx import Document as DocxDocument
+except ModuleNotFoundError:  # pragma: no cover - depends on local environment
+    DocxDocument = None
 
 
 class ExtractionError(ValueError):
@@ -35,6 +42,8 @@ class ExtractionService:
 
     @staticmethod
     def _extract_pdf(content: bytes) -> str:
+        if PdfReader is None:
+            raise ExtractionError("PDF support requires pypdf to be installed")
         reader = PdfReader(BytesIO(content))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
         if not text.strip():
@@ -43,6 +52,8 @@ class ExtractionService:
 
     @staticmethod
     def _extract_docx(content: bytes) -> str:
+        if DocxDocument is None:
+            raise ExtractionError("DOCX support requires python-docx to be installed")
         document = DocxDocument(BytesIO(content))
         text = "\n".join(paragraph.text for paragraph in document.paragraphs if paragraph.text.strip())
         if not text.strip():

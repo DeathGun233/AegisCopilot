@@ -32,6 +32,8 @@ class Settings(BaseModel):
     )
     llm_api_key: str = _pick_api_key()
     environment: str = os.getenv("AEGIS_ENV", "local")
+    admin_password: str = os.getenv("AEGIS_ADMIN_PASSWORD", "admin123")
+    member_password: str = os.getenv("AEGIS_MEMBER_PASSWORD", "member123")
 
 
 settings = Settings()

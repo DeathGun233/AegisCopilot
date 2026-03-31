@@ -18,7 +18,7 @@ class UserService:
             permissions.extend(["knowledge:write", "model:write", "conversation:delete"])
         return {
             **user.model_dump(mode="json"),
-            "role_label": "管理员" if is_admin else "成员",
+            "role_label": "Administrator" if is_admin else "Member",
             "can_manage_knowledge": is_admin,
             "can_manage_models": is_admin,
             "permissions": permissions,
@@ -32,8 +32,3 @@ class UserService:
         if user is None:
             raise KeyError(user_id)
         return user
-
-    def resolve_current_user(self, user_id: str | None = None) -> User:
-        if user_id:
-            return self.get_user(user_id)
-        return self.get_user("admin")

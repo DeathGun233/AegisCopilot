@@ -4,12 +4,20 @@ from functools import lru_cache
 
 from pathlib import Path
 
-from fastapi import Header, HTTPException, Query
+from fastapi import Header, HTTPException, status
 
 from .config import settings
 from .models import User
-from .repositories import ConversationRepository, DocumentRepository, JsonStore, TaskRepository, UserRepository
+from .repositories import (
+    ConversationRepository,
+    DocumentRepository,
+    JsonStore,
+    SessionRepository,
+    TaskRepository,
+    UserRepository,
+)
 from .services.agent import AgentService
+from .services.auth import AuthService
 from .services.documents import DocumentService
 from .services.extraction import ExtractionService
 from .services.generation_service import GenerationService
@@ -29,6 +37,7 @@ class Container:
             JsonStore(storage / "chunks.json"),
         )
         self.users = UserRepository(JsonStore(storage / "users.json"))
+        self.sessions = SessionRepository(JsonStore(storage / "sessions.json"))
         self.tasks = TaskRepository(JsonStore(storage / "tasks.json"))
         self.document_service = DocumentService(self.documents)
         self.extraction_service = ExtractionService()
@@ -36,6 +45,7 @@ class Container:
         self.tool_service = ToolService(self.retrieval_service)
         self.runtime_model_service = RuntimeModelService(storage / "runtime_model.json")
         self.user_service = UserService(self.users)
+        self.auth_service = AuthService(self.users, self.sessions)
         self.generation_service = GenerationService(self.runtime_model_service)
         self.agent_service = AgentService(
             retrieval=self.retrieval_service,
@@ -57,11 +67,15 @@ def get_container() -> Container:
 
 
 def get_current_user(
-    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
-    user_id: str | None = Query(default=None),
+    authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> User:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     container = get_container()
     try:
-        return container.user_service.resolve_current_user(x_user_id or user_id)
+        return container.auth_service.get_user_by_token(token)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="user not found") from exc
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid session") from exc

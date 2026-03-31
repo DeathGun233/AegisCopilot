@@ -5,7 +5,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Iterable
 
-from .models import AgentTask, Chunk, Conversation, Document, Message, User, UserRole
+from .models import AgentTask, AuthSession, Chunk, Conversation, Document, Message, User, UserRole
 
 
 class JsonStore:
@@ -31,8 +31,8 @@ class ConversationRepository:
                 conversation = Conversation.model_validate(record)
                 self._store[conversation.id] = conversation
 
-    def create(self, title: str = "New conversation") -> Conversation:
-        conversation = Conversation(title=title)
+    def create(self, title: str = "New conversation", owner_id: str = "admin") -> Conversation:
+        conversation = Conversation(title=title, owner_id=owner_id)
         self._store[conversation.id] = conversation
         self._persist()
         return conversation
@@ -42,6 +42,9 @@ class ConversationRepository:
 
     def list(self) -> list[Conversation]:
         return list(self._store.values())
+
+    def list_for_user(self, user_id: str) -> list[Conversation]:
+        return [item for item in self._store.values() if item.owner_id == user_id]
 
     def delete(self, conversation_id: str) -> bool:
         if conversation_id not in self._store:
@@ -148,6 +151,9 @@ class TaskRepository:
     def list(self) -> list[AgentTask]:
         return list(self._store.values())
 
+    def list_for_user(self, user_id: str) -> list[AgentTask]:
+        return [item for item in self._store.values() if item.user_id == user_id]
+
     def _persist(self) -> None:
         if self.store:
             self.store.save([item.model_dump(mode="json") for item in self._store.values()])
@@ -183,6 +189,35 @@ class UserRepository:
         if user is None:
             raise KeyError(user_id)
         return user
+
+    def _persist(self) -> None:
+        if self.store:
+            self.store.save([item.model_dump(mode="json") for item in self._store.values()])
+
+
+class SessionRepository:
+    def __init__(self, store: JsonStore | None = None) -> None:
+        self._store: OrderedDict[str, AuthSession] = OrderedDict()
+        self.store = store
+        if self.store and self.store.path.exists():
+            for record in self.store.load():
+                session = AuthSession.model_validate(record)
+                self._store[session.token] = session
+
+    def save(self, session: AuthSession) -> AuthSession:
+        self._store[session.token] = session
+        self._persist()
+        return session
+
+    def get(self, token: str) -> AuthSession | None:
+        return self._store.get(token)
+
+    def delete(self, token: str) -> bool:
+        if token not in self._store:
+            return False
+        del self._store[token]
+        self._persist()
+        return True
 
     def _persist(self) -> None:
         if self.store:

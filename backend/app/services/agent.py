@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from ..config import settings
 from ..models import AgentTask, Conversation, Intent, Message, MessageRole, WorkflowStep
 from ..repositories import TaskRepository
-from .generation import GenerationService
+from .generation_service import GenerationService
 from .retrieval import RetrievalService
 from .tools import ToolService
 
@@ -38,14 +38,7 @@ class AgentService:
 
     def run(self, conversation: Conversation, query: str) -> tuple[Message, AgentTask]:
         context = WorkflowContext(conversation=conversation, query=query)
-        steps = [
-            WorkflowStep.intent_detect,
-            WorkflowStep.retrieve_context,
-            WorkflowStep.plan_response,
-            WorkflowStep.tool_or_answer,
-            WorkflowStep.response_grounding_check,
-            WorkflowStep.final_response,
-        ]
+        steps = self._workflow_steps()
 
         self._detect_intent(context)
         self._retrieve_context(context)
@@ -54,40 +47,23 @@ class AgentService:
         self._grounding_check(context)
         reply = self._finalize(context)
 
-        task = AgentTask(
-            conversation_id=conversation.id,
-            query=query,
-            intent=context.intent or Intent.knowledge_qa,
-            steps=steps,
-            trace=context.trace,
-            final_answer=reply.content,
-            citations=context.retrieval_results,
-            route_reason=context.route_reason,
-            provider=self.generation.provider,
-        )
+        task = self._build_task(conversation, query, context, reply, steps)
         self.tasks.save(task)
         return reply, task
 
     def run_stream(self, conversation: Conversation, query: str):
         context = WorkflowContext(conversation=conversation, query=query)
-        steps = [
-            WorkflowStep.intent_detect,
-            WorkflowStep.retrieve_context,
-            WorkflowStep.plan_response,
-            WorkflowStep.tool_or_answer,
-            WorkflowStep.response_grounding_check,
-            WorkflowStep.final_response,
-        ]
+        steps = self._workflow_steps()
 
         self._detect_intent(context)
-        yield {"type": "status", "message": "正在识别问题意图..."}
+        yield {"type": "status", "message": "Classifying intent..."}
         self._retrieve_context(context)
-        yield {"type": "status", "message": "正在检索知识库..."}
+        yield {"type": "status", "message": "Searching the knowledge base..."}
         self._plan_response(context)
-        yield {"type": "status", "message": "正在生成回答..."}
+        yield {"type": "status", "message": "Generating the answer..."}
 
         if context.intent == Intent.chitchat:
-            context.answer = "你好，我是 AegisCopilot。你可以问我企业制度、流程、产品文档或技术规范相关的问题。"
+            context.answer = self._greeting_answer()
             yield {"type": "delta", "content": context.answer}
         else:
             supporting_results = self._select_supporting_results(context.retrieval_results)
@@ -104,13 +80,26 @@ class AgentService:
                     context.answer += piece
                     yield {"type": "delta", "content": piece}
             else:
-                context.answer = "知识库中没有足够证据支持这个问题的回答。请补充文档，或换个更具体的问题。"
+                context.answer = self._insufficient_evidence_answer()
                 yield {"type": "delta", "content": context.answer}
 
         context.trace.append({"step": WorkflowStep.tool_or_answer, "answer_preview": context.answer[:180]})
         self._grounding_check(context)
         reply = self._finalize(context)
-        task = AgentTask(
+        task = self._build_task(conversation, query, context, reply, steps)
+        self.tasks.save(task)
+        yield {"type": "done", "reply": reply.model_dump(mode="json"), "task": task.model_dump(mode="json")}
+
+    def _build_task(
+        self,
+        conversation: Conversation,
+        query: str,
+        context: WorkflowContext,
+        reply: Message,
+        steps: list[WorkflowStep],
+    ) -> AgentTask:
+        return AgentTask(
+            user_id=conversation.owner_id,
             conversation_id=conversation.id,
             query=query,
             intent=context.intent or Intent.knowledge_qa,
@@ -121,21 +110,30 @@ class AgentService:
             route_reason=context.route_reason,
             provider=self.generation.provider,
         )
-        self.tasks.save(task)
-        yield {"type": "done", "reply": reply.model_dump(mode="json"), "task": task.model_dump(mode="json")}
+
+    @staticmethod
+    def _workflow_steps() -> list[WorkflowStep]:
+        return [
+            WorkflowStep.intent_detect,
+            WorkflowStep.retrieve_context,
+            WorkflowStep.plan_response,
+            WorkflowStep.tool_or_answer,
+            WorkflowStep.response_grounding_check,
+            WorkflowStep.final_response,
+        ]
 
     def _detect_intent(self, context: WorkflowContext) -> None:
         raw_query = context.query.lower()
         compact_query = raw_query.replace(" ", "")
-        if any(word in compact_query for word in ["比较", "对比", "总结", "生成任务", "整理"]):
+        if any(word in compact_query for word in ["compare", "summary", "summarize", "compare", "compare", "对比", "总结", "整理"]):
             context.intent = Intent.task
-            context.route_reason = "The query contains decomposition or summarization language and should use a task-oriented path."
-        elif any(word in compact_query for word in ["你好", "hello", "hi", "在吗"]):
+            context.route_reason = "Detected summarization or comparison language."
+        elif any(word in compact_query for word in ["hello", "hi", "你好", "在吗"]):
             context.intent = Intent.chitchat
-            context.route_reason = "The query is a greeting and can bypass retrieval."
+            context.route_reason = "Detected a greeting."
         else:
             context.intent = Intent.knowledge_qa
-            context.route_reason = "The query asks for knowledge grounded in internal documents."
+            context.route_reason = "Defaulted to grounded knowledge QA."
         context.trace.append(
             {
                 "step": WorkflowStep.intent_detect,
@@ -158,52 +156,44 @@ class AgentService:
         )
 
     def _plan_response(self, context: WorkflowContext) -> None:
-        plan = {
-            "step": WorkflowStep.plan_response,
-            "strategy": (
-                "direct_reply"
-                if context.intent == Intent.chitchat
-                else "tool_augmented_summary"
-                if context.intent == Intent.task
-                else "grounded_knowledge_answer"
-            ),
-            "use_citations": context.intent != Intent.chitchat,
-            "retrieval_hits": len(context.retrieval_results),
-        }
-        context.trace.append(plan)
+        strategy = "direct_reply"
+        if context.intent == Intent.task:
+            strategy = "tool_augmented_summary"
+        elif context.intent == Intent.knowledge_qa:
+            strategy = "grounded_knowledge_answer"
+        context.trace.append(
+            {
+                "step": WorkflowStep.plan_response,
+                "strategy": strategy,
+                "use_citations": context.intent != Intent.chitchat,
+                "retrieval_hits": len(context.retrieval_results),
+            }
+        )
 
     def _tool_or_answer(self, context: WorkflowContext) -> None:
         if context.intent == Intent.chitchat:
-            context.answer = "你好，我是 AegisCopilot。你可以问我企业制度、流程、产品文档或技术规范相关的问题。"
-        elif context.intent == Intent.task and "总结" in context.query:
-            supporting_results = self._select_supporting_results(context.retrieval_results)
-            generated = self.generation.generate(
-                query=context.query,
-                intent=context.intent.value,
-                retrieval_results=supporting_results,
-                conversation_summary=self._summarize_history(context.conversation),
-            )
-            context.retrieval_results = supporting_results
-            context.answer = generated
+            context.answer = self._greeting_answer()
         elif context.retrieval_results:
             supporting_results = self._select_supporting_results(context.retrieval_results)
-            generated = self.generation.generate(
+            context.answer = self.generation.generate(
                 query=context.query,
                 intent=context.intent.value,
                 retrieval_results=supporting_results,
                 conversation_summary=self._summarize_history(context.conversation),
             )
-            context.answer = generated
             context.retrieval_results = supporting_results
         else:
-            context.answer = "知识库中没有足够证据支持这个问题的回答。请补充文档，或换个更具体的问题。"
+            context.answer = self._insufficient_evidence_answer()
         context.trace.append({"step": WorkflowStep.tool_or_answer, "answer_preview": context.answer[:180]})
 
     def _grounding_check(self, context: WorkflowContext) -> None:
         score = context.retrieval_results[0].score if context.retrieval_results else 0.0
         context.grounded = score >= settings.min_grounding_score or context.intent == Intent.chitchat
         if not context.grounded and context.intent != Intent.chitchat:
-            context.answer = "已检索到少量相关内容，但证据不足以给出可靠结论。建议进一步缩小问题范围或补充内部资料。"
+            context.answer = (
+                "I found a small amount of related content, but not enough evidence to give a reliable answer. "
+                "Please narrow the question or add more internal material."
+            )
         context.trace.append(
             {
                 "step": WorkflowStep.response_grounding_check,
@@ -223,17 +213,6 @@ class AgentService:
         return " | ".join(relevant[-4:])
 
     @staticmethod
-    def _synthesize_answer(query: str, results: list) -> str:
-        top = results[0]
-        if "请假" in query:
-            return f"根据 {top.document_title}，请假通常需要提前提交申请，并按照审批流程完成直属主管与 HR 审批。"
-        if "报销" in query:
-            return f"根据 {top.document_title}，报销流程通常包含票据上传、主管审批、财务复核与打款。"
-        if "发布" in query or "上线" in query:
-            return f"根据 {top.document_title}，上线发布前应完成测试、回滚预案、审批与变更通知。"
-        return f"问题“{query}”的相关答案主要集中在 {top.document_title}，建议结合引用片段核对具体细节。"
-
-    @staticmethod
     def _select_supporting_results(results: list) -> list:
         if not results:
             return []
@@ -243,11 +222,9 @@ class AgentService:
         return filtered[:2] or results[:1]
 
     @staticmethod
-    def _format_citations(results: list) -> str:
-        return "\n".join(
-            f"- {AgentService._humanize_source(result)}" for result in results
-        )
+    def _greeting_answer() -> str:
+        return "Hello, I am AegisCopilot. Ask me about internal policy, process, product docs, or engineering rules."
 
     @staticmethod
-    def _humanize_source(result) -> str:
-        return result.display_source or f"{result.document_title} | 片段 1"
+    def _insufficient_evidence_answer() -> str:
+        return "There is not enough grounded evidence in the knowledge base to answer this question yet."
