@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from dataclasses import dataclass
 
 from ..models import RetrievalResult
 from ..repositories import DocumentRepository
@@ -10,19 +11,60 @@ from .runtime_retrieval import RuntimeRetrievalService
 from .text import normalize_text, tokenize
 
 
+@dataclass(frozen=True)
+class QueryVariant:
+    query: str
+    label: str
+    boost: float
+
+
 class RetrievalService:
     def __init__(self, repo: DocumentRepository, runtime_retrieval: RuntimeRetrievalService) -> None:
         self.repo = repo
         self.runtime_retrieval = runtime_retrieval
 
-    def search(self, query: str, top_k: int | None = None) -> list[RetrievalResult]:
+    def search(
+        self,
+        query: str,
+        top_k: int | None = None,
+        query_variants: list[str] | None = None,
+    ) -> list[RetrievalResult]:
+        settings = self.runtime_retrieval.get_settings()
+        final_top_k = top_k or settings.top_k
+        variants = self._build_query_variants(query, query_variants)
+        if not variants:
+            return []
+
+        per_query_limit = max(settings.candidate_k, final_top_k)
+        merged: dict[str, RetrievalResult] = {}
+        for variant in variants:
+            for item in self._search_single_query(variant.query, settings, per_query_limit):
+                final_score = round(min(1.0, item.score * variant.boost), 4)
+                updated = item.model_copy(
+                    update={
+                        "score": final_score,
+                        "matched_query": variant.query,
+                        "query_variant": variant.label,
+                        "query_boost": variant.boost,
+                    }
+                )
+                current = merged.get(updated.chunk_id)
+                if current is None or updated.score > current.score:
+                    merged[updated.chunk_id] = updated
+
+        deduped = self._dedupe_results(list(merged.values()))
+        deduped.sort(
+            key=lambda item: (item.score, item.keyword_score, item.semantic_score, item.coverage_score),
+            reverse=True,
+        )
+        return deduped[:final_top_k]
+
+    def _search_single_query(self, query: str, settings, limit: int) -> list[RetrievalResult]:
         normalized_query = normalize_text(query).lower()
         query_tokens = tokenize(normalized_query)
         if not query_tokens:
             return []
 
-        settings = self.runtime_retrieval.get_settings()
-        final_top_k = top_k or settings.top_k
         query_counter = Counter(query_tokens)
         query_ngrams = self._char_ngrams(normalized_query)
 
@@ -81,13 +123,36 @@ class RetrievalService:
         shortlist = candidates[: settings.candidate_k]
         reranked = self._rerank(shortlist, settings.rerank_weight)
         deduped = self._dedupe_results(reranked)
-        return deduped[:final_top_k]
+        return deduped[:limit]
 
     def get_runtime_settings(self):
         return self.runtime_retrieval.get_settings()
 
     def update_runtime_settings(self, **updates: object):
         return self.runtime_retrieval.update_settings(**updates)
+
+    @staticmethod
+    def _build_query_variants(query: str, query_variants: list[str] | None) -> list[QueryVariant]:
+        base = normalize_text(query)
+        if not base:
+            return []
+
+        variants: list[QueryVariant] = [QueryVariant(query=base, label="primary", boost=1.0)]
+        if not query_variants:
+            return variants
+
+        seen = {base.lower()}
+        for index, item in enumerate(query_variants, start=1):
+            normalized = normalize_text(item)
+            if not normalized:
+                continue
+            key = normalized.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            boost = max(0.72, 0.92 - (index - 1) * 0.06)
+            variants.append(QueryVariant(query=normalized, label=f"expand_{index}", boost=round(boost, 2)))
+        return variants
 
     def _rerank(self, candidates: list[dict[str, object]], rerank_weight: float) -> list[RetrievalResult]:
         rerank_factor = min(max(rerank_weight, 0.0), 1.0)
@@ -129,6 +194,9 @@ class RetrievalService:
                     semantic_score=round(semantic_score, 4),
                     rerank_score=round(rerank_score, 4),
                     coverage_score=round(coverage_score, 4),
+                    matched_query="",
+                    query_variant="primary",
+                    query_boost=1.0,
                 )
             )
 

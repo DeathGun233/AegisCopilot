@@ -19,7 +19,11 @@ class Intent(str, Enum):
 
 
 class WorkflowStep(str, Enum):
+    clarification_check = "clarification_check"
+    query_rewrite = "query_rewrite"
+    query_expand = "query_expand"
     intent_detect = "intent_detect"
+    intent_route = "intent_route"
     retrieve_context = "retrieve_context"
     plan_response = "plan_response"
     tool_or_answer = "tool_or_answer"
@@ -117,6 +121,9 @@ class RetrievalResult(BaseModel):
     semantic_score: float = 0.0
     rerank_score: float = 0.0
     coverage_score: float = 0.0
+    matched_query: str = ""
+    query_variant: str = "primary"
+    query_boost: float = 1.0
 
 
 class RetrievalSettings(BaseModel):

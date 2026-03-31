@@ -263,14 +263,13 @@ export function AppProvider({ children }) {
   }
 
   async function previewRetrieval(query, topK) {
-    const data = await fetchJson("/retrieval/preview", {
+    return fetchJson("/retrieval/preview", {
       method: "POST",
       body: {
         query,
         top_k: topK || null,
       },
     });
-    return data.results;
   }
 
   async function selectModel(modelId) {

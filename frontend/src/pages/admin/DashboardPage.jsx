@@ -29,6 +29,7 @@ export function DashboardPage() {
   const [previewQuery, setPreviewQuery] = useState(defaultPreviewQuery);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewResults, setPreviewResults] = useState([]);
+  const [previewUnderstanding, setPreviewUnderstanding] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +51,8 @@ export function DashboardPage() {
         });
         const preview = await previewRetrieval(defaultPreviewQuery, settings.top_k);
         if (!cancelled) {
-          setPreviewResults(preview);
+          setPreviewResults(preview.results);
+          setPreviewUnderstanding(preview.understanding);
         }
       } catch (error) {
         if (!cancelled) {
@@ -83,9 +85,10 @@ export function DashboardPage() {
       };
       const settings = await updateRetrievalSettings(payload);
       setRetrievalSettings(settings);
-      setGlobalNotice("检索参数已更新。");
+      setGlobalNotice("检索参数已更新");
       const preview = await previewRetrieval(previewQuery, settings.top_k);
-      setPreviewResults(preview);
+      setPreviewResults(preview.results);
+      setPreviewUnderstanding(preview.understanding);
     } catch (error) {
       setGlobalNotice(error.message || "检索参数保存失败");
     } finally {
@@ -97,8 +100,9 @@ export function DashboardPage() {
     event.preventDefault();
     setPreviewLoading(true);
     try {
-      const results = await previewRetrieval(previewQuery, Number(form.top_k));
-      setPreviewResults(results);
+      const preview = await previewRetrieval(previewQuery, Number(form.top_k));
+      setPreviewResults(preview.results);
+      setPreviewUnderstanding(preview.understanding);
     } catch (error) {
       setGlobalNotice(error.message || "检索预览失败");
     } finally {
@@ -300,6 +304,46 @@ export function DashboardPage() {
             </div>
           </form>
 
+          {previewUnderstanding ? (
+            <div className="definition-list">
+              <div>
+                <span>识别意图</span>
+                <strong>{previewUnderstanding.intent}</strong>
+              </div>
+              <div>
+                <span>路由原因</span>
+                <strong>{previewUnderstanding.route_reason}</strong>
+              </div>
+              <div>
+                <span>改写后的查询</span>
+                <strong>{previewUnderstanding.rewritten_query || "-"}</strong>
+              </div>
+              <div>
+                <span>历史主题</span>
+                <strong>{previewUnderstanding.history_topic || "-"}</strong>
+              </div>
+            </div>
+          ) : null}
+
+          {previewUnderstanding?.retrieval_queries?.length ? (
+            <div className="chunk-list">
+              <article className="chunk-card">
+                <strong>本次检索表达</strong>
+                <p>{previewUnderstanding.retrieval_queries.join(" / ")}</p>
+                <small>
+                  扩展表达：
+                  {previewUnderstanding.expanded_queries?.length
+                    ? previewUnderstanding.expanded_queries.join(" / ")
+                    : "无"}
+                </small>
+              </article>
+            </div>
+          ) : null}
+
+          {previewUnderstanding?.needs_clarification ? (
+            <div className="table-empty">{previewUnderstanding.clarification_prompt}</div>
+          ) : null}
+
           <div className="chunk-list">
             {previewResults.length ? (
               previewResults.map((item) => (
@@ -310,7 +354,9 @@ export function DashboardPage() {
                     总分 {item.score} / 关键词 {item.keyword_score} / 语义 {item.semantic_score} / 重排{" "}
                     {item.rerank_score}
                   </small>
-                  <small>覆盖度 {item.coverage_score} · 方法 {item.retrieval_method}</small>
+                  <small>
+                    命中查询 {item.matched_query || "-"} / 变体 {item.query_variant} / 覆盖度 {item.coverage_score}
+                  </small>
                 </article>
               ))
             ) : (

@@ -21,6 +21,7 @@ from .services.auth import AuthService
 from .services.documents import DocumentService
 from .services.extraction import ExtractionService
 from .services.generation_service import GenerationService
+from .services.query_understanding import QueryUnderstandingService
 from .services.retrieval import RetrievalService
 from .services.runtime_models import RuntimeModelService
 from .services.runtime_retrieval import RuntimeRetrievalService
@@ -45,6 +46,7 @@ class Container:
         self.document_service = DocumentService(self.documents, self.document_tasks)
         self.extraction_service = ExtractionService()
         self.retrieval_service = RetrievalService(self.documents, self.runtime_retrieval_service)
+        self.query_understanding_service = QueryUnderstandingService()
         self.tool_service = ToolService(self.retrieval_service)
         self.runtime_model_service = RuntimeModelService(storage / "runtime_model.json")
         self.user_service = UserService(self.users)
@@ -55,6 +57,7 @@ class Container:
             tools=self.tool_service,
             tasks=self.tasks,
             generation=self.generation_service,
+            query_understanding=self.query_understanding_service,
         )
         self.system_service = SystemService(
             self.conversations,

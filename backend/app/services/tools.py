@@ -8,8 +8,8 @@ class ToolService:
     def __init__(self, retrieval: RetrievalService) -> None:
         self.retrieval = retrieval
 
-    def knowledge_search(self, query: str) -> list[RetrievalResult]:
-        return self.retrieval.search(query)
+    def knowledge_search(self, query: str, query_variants: list[str] | None = None) -> list[RetrievalResult]:
+        return self.retrieval.search(query, query_variants=query_variants)
 
     def web_search_mock(self, query: str) -> dict[str, str]:
         return {

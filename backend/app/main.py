@@ -30,6 +30,7 @@ from .api_schemas import (
     RetrievalSettingsResponse,
     RetrievalSettingsUpdateRequest,
     SystemStatsResponse,
+    QueryUnderstandingPreview,
     UserListResponse,
 )
 from .config import settings
@@ -585,7 +586,27 @@ def preview_retrieval(
     current_user: User = Depends(get_current_user),
 ) -> RetrievalPreviewResponse:
     container = get_container()
-    return RetrievalPreviewResponse(results=container.retrieval_service.search(request.query, request.top_k))
+    understanding = container.query_understanding_service.analyze(None, request.query)
+    results = []
+    if not understanding.needs_clarification:
+        primary_query = understanding.rewritten_query or request.query
+        variant_queries = [item for item in understanding.retrieval_queries if item.lower() != primary_query.lower()]
+        results = container.retrieval_service.search(primary_query, request.top_k, variant_queries)
+    return RetrievalPreviewResponse(
+        understanding=QueryUnderstandingPreview(
+            original_query=understanding.original_query,
+            rewritten_query=understanding.rewritten_query,
+            retrieval_queries=understanding.retrieval_queries,
+            expanded_queries=understanding.expanded_queries,
+            intent=understanding.intent.value,
+            route_reason=understanding.route_reason,
+            needs_clarification=understanding.needs_clarification,
+            clarification_reason=understanding.clarification_reason,
+            clarification_prompt=understanding.clarification_prompt,
+            history_topic=understanding.history_topic,
+        ),
+        results=results,
+    )
 
 
 @app.post("/chat", response_model=ChatResponse)

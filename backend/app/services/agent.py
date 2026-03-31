@@ -6,6 +6,7 @@ from ..config import settings
 from ..models import AgentTask, Conversation, Intent, Message, MessageRole, WorkflowStep
 from ..repositories import TaskRepository
 from .generation_service import GenerationService
+from .query_understanding import QueryUnderstandingResult, QueryUnderstandingService
 from .retrieval import RetrievalService
 from .tools import ToolService
 
@@ -14,6 +15,13 @@ from .tools import ToolService
 class WorkflowContext:
     conversation: Conversation
     query: str
+    understanding: QueryUnderstandingResult | None = None
+    rewritten_query: str = ""
+    expanded_queries: list[str] = field(default_factory=list)
+    retrieval_queries: list[str] = field(default_factory=list)
+    clarification_needed: bool = False
+    clarification_reason: str = ""
+    clarification_prompt: str = ""
     intent: Intent | None = None
     route_reason: str = ""
     retrieval_results: list = field(default_factory=list)
@@ -30,16 +38,22 @@ class AgentService:
         tools: ToolService,
         tasks: TaskRepository,
         generation: GenerationService,
+        query_understanding: QueryUnderstandingService,
     ) -> None:
         self.retrieval = retrieval
         self.tools = tools
         self.tasks = tasks
         self.generation = generation
+        self.query_understanding = query_understanding
 
     def run(self, conversation: Conversation, query: str) -> tuple[Message, AgentTask]:
         context = WorkflowContext(conversation=conversation, query=query)
         steps = self._workflow_steps()
 
+        self._understand_query(context)
+        self._clarification_check(context)
+        self._rewrite_query(context)
+        self._expand_query(context)
         self._detect_intent(context)
         self._retrieve_context(context)
         self._plan_response(context)
@@ -55,6 +69,13 @@ class AgentService:
         context = WorkflowContext(conversation=conversation, query=query)
         steps = self._workflow_steps()
 
+        self._understand_query(context)
+        self._clarification_check(context)
+        yield {"type": "status", "message": "正在判断是否需要补充澄清..."}
+        self._rewrite_query(context)
+        yield {"type": "status", "message": "正在改写查询表达..."}
+        self._expand_query(context)
+        yield {"type": "status", "message": "正在扩展检索表达..."}
         self._detect_intent(context)
         yield {"type": "status", "message": "正在识别问题意图..."}
         self._retrieve_context(context)
@@ -62,7 +83,10 @@ class AgentService:
         self._plan_response(context)
         yield {"type": "status", "message": "正在生成回答..."}
 
-        if context.intent == Intent.chitchat:
+        if context.clarification_needed:
+            context.answer = context.clarification_prompt
+            yield {"type": "delta", "content": context.answer}
+        elif context.intent == Intent.chitchat:
             context.answer = self._greeting_answer()
             yield {"type": "delta", "content": context.answer}
         else:
@@ -114,7 +138,10 @@ class AgentService:
     @staticmethod
     def _workflow_steps() -> list[WorkflowStep]:
         return [
-            WorkflowStep.intent_detect,
+            WorkflowStep.clarification_check,
+            WorkflowStep.query_rewrite,
+            WorkflowStep.query_expand,
+            WorkflowStep.intent_route,
             WorkflowStep.retrieve_context,
             WorkflowStep.plan_response,
             WorkflowStep.tool_or_answer,
@@ -122,30 +149,63 @@ class AgentService:
             WorkflowStep.final_response,
         ]
 
-    def _detect_intent(self, context: WorkflowContext) -> None:
-        raw_query = context.query.lower()
-        compact_query = raw_query.replace(" ", "")
-        if any(word in compact_query for word in ["compare", "summary", "summarize", "对比", "总结", "整理"]):
-            context.intent = Intent.task
-            context.route_reason = "识别为总结、整理或对比类问题。"
-        elif any(word in compact_query for word in ["hello", "hi", "你好", "在吗"]):
-            context.intent = Intent.chitchat
-            context.route_reason = "识别为寒暄类问题。"
-        else:
-            context.intent = Intent.knowledge_qa
-            context.route_reason = "默认走知识库问答链路。"
+    def _understand_query(self, context: WorkflowContext) -> None:
+        context.understanding = self.query_understanding.analyze(context.conversation, context.query)
+
+    def _clarification_check(self, context: WorkflowContext) -> None:
+        understanding = context.understanding or self.query_understanding.analyze(context.conversation, context.query)
+        context.clarification_needed = understanding.needs_clarification
+        context.clarification_reason = understanding.clarification_reason
+        context.clarification_prompt = understanding.clarification_prompt
         context.trace.append(
             {
-                "step": WorkflowStep.intent_detect,
+                "step": WorkflowStep.clarification_check,
+                "needs_clarification": context.clarification_needed,
+                "clarification_reason": context.clarification_reason,
+                "clarification_prompt": context.clarification_prompt,
+                "history_topic": understanding.history_topic,
+            }
+        )
+
+    def _rewrite_query(self, context: WorkflowContext) -> None:
+        understanding = context.understanding or self.query_understanding.analyze(context.conversation, context.query)
+        context.rewritten_query = understanding.rewritten_query or context.query
+        context.trace.append(
+            {
+                "step": WorkflowStep.query_rewrite,
+                "original_query": context.query,
+                "rewritten_query": context.rewritten_query,
+            }
+        )
+
+    def _expand_query(self, context: WorkflowContext) -> None:
+        understanding = context.understanding or self.query_understanding.analyze(context.conversation, context.query)
+        context.expanded_queries = understanding.expanded_queries
+        context.retrieval_queries = understanding.retrieval_queries or [context.rewritten_query or context.query]
+        context.trace.append(
+            {
+                "step": WorkflowStep.query_expand,
+                "retrieval_queries": context.retrieval_queries,
+                "expanded_queries": context.expanded_queries,
+            }
+        )
+
+    def _detect_intent(self, context: WorkflowContext) -> None:
+        understanding = context.understanding or self.query_understanding.analyze(context.conversation, context.query)
+        context.intent = understanding.intent
+        context.route_reason = understanding.route_reason
+        context.trace.append(
+            {
+                "step": WorkflowStep.intent_route,
                 "intent": context.intent,
                 "route_reason": context.route_reason,
             }
         )
 
     def _retrieve_context(self, context: WorkflowContext) -> None:
-        if context.intent == Intent.chitchat:
+        retrieval_settings = self.retrieval.get_runtime_settings()
+        if context.clarification_needed or context.intent == Intent.chitchat:
             context.retrieval_results = []
-            retrieval_settings = self.retrieval.get_runtime_settings()
             context.trace.append(
                 {
                     "step": WorkflowStep.retrieve_context,
@@ -153,13 +213,15 @@ class AgentService:
                     "strategy": retrieval_settings.strategy.value,
                     "top_k": retrieval_settings.top_k,
                     "candidate_k": retrieval_settings.candidate_k,
+                    "retrieval_queries": context.retrieval_queries,
                     "sources": [],
                 }
             )
             return
 
-        context.retrieval_results = self.tools.knowledge_search(context.query)
-        retrieval_settings = self.retrieval.get_runtime_settings()
+        primary_query = context.rewritten_query or context.query
+        variant_queries = [item for item in context.retrieval_queries if item.lower() != primary_query.lower()]
+        context.retrieval_results = self.tools.knowledge_search(primary_query, variant_queries)
         context.trace.append(
             {
                 "step": WorkflowStep.retrieve_context,
@@ -167,6 +229,7 @@ class AgentService:
                 "strategy": retrieval_settings.strategy.value,
                 "top_k": retrieval_settings.top_k,
                 "candidate_k": retrieval_settings.candidate_k,
+                "retrieval_queries": context.retrieval_queries,
                 "sources": [item.source for item in context.retrieval_results],
                 "score_preview": [
                     {
@@ -175,6 +238,8 @@ class AgentService:
                         "keyword_score": item.keyword_score,
                         "semantic_score": item.semantic_score,
                         "rerank_score": item.rerank_score,
+                        "matched_query": item.matched_query,
+                        "query_variant": item.query_variant,
                     }
                     for item in context.retrieval_results[:4]
                 ],
@@ -183,7 +248,9 @@ class AgentService:
 
     def _plan_response(self, context: WorkflowContext) -> None:
         strategy = "direct_reply"
-        if context.intent == Intent.task:
+        if context.clarification_needed:
+            strategy = "clarification_prompt"
+        elif context.intent == Intent.task:
             strategy = "tool_augmented_summary"
         elif context.intent == Intent.knowledge_qa:
             strategy = "grounded_knowledge_answer"
@@ -191,13 +258,15 @@ class AgentService:
             {
                 "step": WorkflowStep.plan_response,
                 "strategy": strategy,
-                "use_citations": context.intent != Intent.chitchat,
+                "use_citations": context.intent != Intent.chitchat and not context.clarification_needed,
                 "retrieval_hits": len(context.retrieval_results),
             }
         )
 
     def _tool_or_answer(self, context: WorkflowContext) -> None:
-        if context.intent == Intent.chitchat:
+        if context.clarification_needed:
+            context.answer = context.clarification_prompt
+        elif context.intent == Intent.chitchat:
             context.answer = self._greeting_answer()
         elif context.retrieval_results:
             supporting_results = self._select_supporting_results(context.retrieval_results)
@@ -214,10 +283,14 @@ class AgentService:
 
     def _grounding_check(self, context: WorkflowContext) -> None:
         score = context.retrieval_results[0].score if context.retrieval_results else 0.0
-        context.grounded = score >= settings.min_grounding_score or context.intent == Intent.chitchat
-        if not context.grounded and context.intent != Intent.chitchat:
+        context.grounded = (
+            score >= settings.min_grounding_score
+            or context.intent == Intent.chitchat
+            or context.clarification_needed
+        )
+        if not context.grounded and context.intent != Intent.chitchat and not context.clarification_needed:
             context.answer = (
-                "我检索到少量相关内容，但证据还不足以支持可靠结论。"
+                "我检索到少量相关内容，但证据还不足以支撑可靠结论。"
                 "建议进一步缩小问题范围，或者补充更多内部资料。"
             )
         context.trace.append(
@@ -253,4 +326,4 @@ class AgentService:
 
     @staticmethod
     def _insufficient_evidence_answer() -> str:
-        return "当前知识库里还没有足够证据支持这个问题的回答。"
+        return "当前知识库里还没有足够证据支撑这个问题的回答。"

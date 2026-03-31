@@ -114,7 +114,21 @@ class RetrievalPreviewRequest(BaseModel):
     top_k: int | None = None
 
 
+class QueryUnderstandingPreview(BaseModel):
+    original_query: str
+    rewritten_query: str
+    retrieval_queries: list[str] = Field(default_factory=list)
+    expanded_queries: list[str] = Field(default_factory=list)
+    intent: str
+    route_reason: str
+    needs_clarification: bool = False
+    clarification_reason: str = ""
+    clarification_prompt: str = ""
+    history_topic: str = ""
+
+
 class RetrievalPreviewResponse(BaseModel):
+    understanding: QueryUnderstandingPreview
     results: list[RetrievalResult]
 
 
