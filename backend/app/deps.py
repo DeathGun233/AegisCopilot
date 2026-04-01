@@ -19,6 +19,7 @@ from .repositories import (
 from .services.agent import AgentService
 from .services.auth import AuthService
 from .services.documents import DocumentService
+from .services.embeddings import EmbeddingService
 from .services.extraction import ExtractionService
 from .services.generation_service import GenerationService
 from .services.query_understanding import QueryUnderstandingService
@@ -43,9 +44,14 @@ class Container:
         self.sessions = SessionRepository(JsonStore(storage / "sessions.json"))
         self.tasks = TaskRepository(JsonStore(storage / "tasks.json"))
         self.runtime_retrieval_service = RuntimeRetrievalService(storage / "runtime_retrieval.json")
-        self.document_service = DocumentService(self.documents, self.document_tasks)
+        self.embedding_service = EmbeddingService()
+        self.document_service = DocumentService(self.documents, self.document_tasks, self.embedding_service)
         self.extraction_service = ExtractionService()
-        self.retrieval_service = RetrievalService(self.documents, self.runtime_retrieval_service)
+        self.retrieval_service = RetrievalService(
+            self.documents,
+            self.runtime_retrieval_service,
+            self.embedding_service,
+        )
         self.query_understanding_service = QueryUnderstandingService()
         self.tool_service = ToolService(self.retrieval_service)
         self.runtime_model_service = RuntimeModelService(storage / "runtime_model.json")
@@ -65,6 +71,7 @@ class Container:
             self.tasks,
             self.runtime_model_service,
             self.runtime_retrieval_service,
+            self.embedding_service,
         )
 
 

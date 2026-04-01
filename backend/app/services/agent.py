@@ -237,6 +237,7 @@ class AgentService:
                         "score": item.score,
                         "keyword_score": item.keyword_score,
                         "semantic_score": item.semantic_score,
+                        "semantic_source": item.semantic_source,
                         "rerank_score": item.rerank_score,
                         "matched_query": item.matched_query,
                         "query_variant": item.query_variant,

@@ -116,7 +116,7 @@ export function DashboardPage() {
         <div>
           <span className="hero-pill">运营总览</span>
           <h2>后台运行概览</h2>
-          <p>统一查看知识库规模、模型运行状态、检索策略和 Agent 任务情况。</p>
+          <p>集中查看知识库规模、模型运行状态、向量召回接入情况，以及当前检索链路的关键参数。</p>
         </div>
       </section>
 
@@ -124,22 +124,22 @@ export function DashboardPage() {
         <article className="metric-card">
           <span>知识文档</span>
           <strong>{stats?.documents ?? 0}</strong>
-          <small>当前已纳入知识库管理的文档总数。</small>
+          <small>当前纳入知识库管理的文档总数。</small>
         </article>
         <article className="metric-card">
           <span>索引片段</span>
           <strong>{stats?.indexed_chunks ?? 0}</strong>
-          <small>当前可被检索层召回的片段数量。</small>
+          <small>当前可被检索命中的文档片段数量。</small>
+        </article>
+        <article className="metric-card">
+          <span>已向量化片段</span>
+          <strong>{stats?.embedded_chunks ?? 0}</strong>
+          <small>已经写入真实 embedding 的片段数量。</small>
         </article>
         <article className="metric-card">
           <span>检索 top-k</span>
           <strong>{stats?.retrieval_top_k ?? "-"}</strong>
-          <small>当前最终返回的检索结果上限。</small>
-        </article>
-        <article className="metric-card">
-          <span>候选召回</span>
-          <strong>{stats?.retrieval_candidate_k ?? "-"}</strong>
-          <small>进入重排前的候选片段数量。</small>
+          <small>最终返回给生成模型的证据条数上限。</small>
         </article>
       </section>
 
@@ -180,20 +180,20 @@ export function DashboardPage() {
               <strong>{users.length}</strong>
             </div>
             <div>
-              <span>模型提供方</span>
+              <span>生成模型提供方</span>
               <strong>{stats?.llm_provider || "-"}</strong>
             </div>
             <div>
-              <span>当前模型</span>
+              <span>当前生成模型</span>
               <strong>{modelCatalog?.active_model || stats?.llm_model || "-"}</strong>
             </div>
             <div>
-              <span>检索策略</span>
-              <strong>{stats?.retrieval_strategy || retrievalSettings?.strategy || "-"}</strong>
+              <span>Embedding 模型</span>
+              <strong>{stats?.embedding_model || "-"}</strong>
             </div>
             <div>
-              <span>Grounding 阈值</span>
-              <strong>{stats?.grounding_threshold ?? "-"}</strong>
+              <span>Embedding 鉴权</span>
+              <strong>{stats?.embedding_api_key_configured ? "已配置" : "未配置"}</strong>
             </div>
           </div>
         </article>
@@ -355,7 +355,8 @@ export function DashboardPage() {
                     {item.rerank_score}
                   </small>
                   <small>
-                    命中查询 {item.matched_query || "-"} / 变体 {item.query_variant} / 覆盖度 {item.coverage_score}
+                    语义来源 {item.semantic_source} / 命中查询 {item.matched_query || "-"} / 变体{" "}
+                    {item.query_variant}
                   </small>
                 </article>
               ))

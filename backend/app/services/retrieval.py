@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from ..models import RetrievalResult
 from ..repositories import DocumentRepository
+from .embeddings import EmbeddingService
 from .runtime_retrieval import RuntimeRetrievalService
 from .text import normalize_text, tokenize
 
@@ -19,9 +20,15 @@ class QueryVariant:
 
 
 class RetrievalService:
-    def __init__(self, repo: DocumentRepository, runtime_retrieval: RuntimeRetrievalService) -> None:
+    def __init__(
+        self,
+        repo: DocumentRepository,
+        runtime_retrieval: RuntimeRetrievalService,
+        embeddings: EmbeddingService,
+    ) -> None:
         self.repo = repo
         self.runtime_retrieval = runtime_retrieval
+        self.embeddings = embeddings
 
     def search(
         self,
@@ -67,6 +74,7 @@ class RetrievalService:
 
         query_counter = Counter(query_tokens)
         query_ngrams = self._char_ngrams(normalized_query)
+        query_embedding = self.embeddings.embed_text(normalized_query) if self.embeddings.is_enabled() else []
 
         keyword_weight, semantic_weight = self._normalize_pair(
             settings.keyword_weight,
@@ -91,10 +99,16 @@ class RetrievalService:
                 coverage * 0.55 + density * 0.18 + title_bonus * 0.12 + exact_phrase_bonus * 0.15,
             )
 
-            chunk_ngrams = self._char_ngrams(chunk_text)
-            semantic_cosine = self._cosine_similarity(query_ngrams, chunk_ngrams)
             token_jaccard = self._jaccard_similarity(set(query_tokens), set(chunk.tokens))
-            semantic_score = min(1.0, semantic_cosine * 0.72 + token_jaccard * 0.28)
+            semantic_source = "heuristic"
+            if query_embedding and chunk.embedding and len(query_embedding) == len(chunk.embedding):
+                vector_cosine = self._vector_cosine_similarity(query_embedding, chunk.embedding)
+                semantic_score = min(1.0, vector_cosine * 0.85 + token_jaccard * 0.15)
+                semantic_source = "embedding"
+            else:
+                chunk_ngrams = self._char_ngrams(chunk_text)
+                semantic_cosine = self._cosine_similarity(query_ngrams, chunk_ngrams)
+                semantic_score = min(1.0, semantic_cosine * 0.72 + token_jaccard * 0.28)
 
             hybrid_score = keyword_score * keyword_weight + semantic_score * semantic_weight
             if hybrid_score < settings.min_score and exact_phrase_bonus == 0.0:
@@ -105,6 +119,7 @@ class RetrievalService:
                     "chunk": chunk,
                     "keyword_score": round(keyword_score, 4),
                     "semantic_score": round(semantic_score, 4),
+                    "semantic_source": semantic_source,
                     "hybrid_score": round(hybrid_score, 4),
                     "coverage_score": round(coverage, 4),
                     "title_bonus": round(title_bonus, 4),
@@ -163,6 +178,7 @@ class RetrievalService:
             coverage_score = float(item["coverage_score"])
             keyword_score = float(item["keyword_score"])
             semantic_score = float(item["semantic_score"])
+            semantic_source = str(item["semantic_source"])
             title_bonus = float(item["title_bonus"])
             phrase_bonus = float(item["phrase_bonus"])
 
@@ -192,6 +208,7 @@ class RetrievalService:
                     retrieval_method="hybrid",
                     keyword_score=round(keyword_score, 4),
                     semantic_score=round(semantic_score, 4),
+                    semantic_source=semantic_source,
                     rerank_score=round(rerank_score, 4),
                     coverage_score=round(coverage_score, 4),
                     matched_query="",
@@ -238,6 +255,19 @@ class RetrievalService:
             return 0.0
         left_norm = math.sqrt(sum(value * value for value in left.values()))
         right_norm = math.sqrt(sum(value * value for value in right.values()))
+        if left_norm == 0 or right_norm == 0:
+            return 0.0
+        return dot / (left_norm * right_norm)
+
+    @staticmethod
+    def _vector_cosine_similarity(left: list[float], right: list[float]) -> float:
+        if not left or not right or len(left) != len(right):
+            return 0.0
+        dot = sum(lv * rv for lv, rv in zip(left, right))
+        if dot <= 0:
+            return 0.0
+        left_norm = math.sqrt(sum(value * value for value in left))
+        right_norm = math.sqrt(sum(value * value for value in right))
         if left_norm == 0 or right_norm == 0:
             return 0.0
         return dot / (left_norm * right_norm)

@@ -13,6 +13,10 @@ def _pick_api_key() -> str:
     )
 
 
+def _pick_embedding_api_key() -> str:
+    return os.getenv("AEGIS_EMBEDDING_API_KEY") or _pick_api_key()
+
+
 class Settings(BaseModel):
     app_name: str = "AegisCopilot API"
     app_version: str = "0.1.0"
@@ -36,6 +40,15 @@ class Settings(BaseModel):
         "https://dashscope.aliyuncs.com/compatible-mode/v1",
     )
     llm_api_key: str = _pick_api_key()
+    embedding_provider: str = os.getenv(
+        "AEGIS_EMBEDDING_PROVIDER",
+        "openai-compatible" if _pick_embedding_api_key() else "disabled",
+    )
+    embedding_model: str = os.getenv("AEGIS_EMBEDDING_MODEL", "text-embedding-v4")
+    embedding_base_url: str = os.getenv("AEGIS_EMBEDDING_BASE_URL", llm_base_url)
+    embedding_api_key: str = _pick_embedding_api_key()
+    embedding_dimensions: int = int(os.getenv("AEGIS_EMBEDDING_DIMENSIONS", "1024"))
+    embedding_batch_size: int = int(os.getenv("AEGIS_EMBEDDING_BATCH_SIZE", "10"))
     environment: str = os.getenv("AEGIS_ENV", "local")
     admin_password: str = os.getenv("AEGIS_ADMIN_PASSWORD", "admin123")
     member_password: str = os.getenv("AEGIS_MEMBER_PASSWORD", "member123")

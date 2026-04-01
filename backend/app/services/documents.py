@@ -10,13 +10,20 @@ from ..models import (
     utc_now,
 )
 from ..repositories import DocumentRepository, DocumentTaskRepository
+from .embeddings import EmbeddingService
 from .text import normalize_text, split_into_chunks, tokenize
 
 
 class DocumentService:
-    def __init__(self, repo: DocumentRepository, task_repo: DocumentTaskRepository) -> None:
+    def __init__(
+        self,
+        repo: DocumentRepository,
+        task_repo: DocumentTaskRepository,
+        embeddings: EmbeddingService,
+    ) -> None:
         self.repo = repo
         self.task_repo = task_repo
+        self.embeddings = embeddings
 
     def create_document(
         self,
@@ -197,8 +204,9 @@ class DocumentService:
             task.message = message
         return self.task_repo.save(task)
 
-    @staticmethod
-    def _build_chunks(document: Document) -> list[Chunk]:
+    def _build_chunks(self, document: Document) -> list[Chunk]:
+        chunk_texts = list(split_into_chunks(document.content))
+        vectors = self.embeddings.embed_texts(chunk_texts) if self.embeddings.is_enabled() else []
         return [
             Chunk(
                 document_id=document.id,
@@ -206,11 +214,12 @@ class DocumentService:
                 text=chunk_text,
                 chunk_index=index,
                 tokens=tokenize(chunk_text),
+                embedding=vectors[index] if index < len(vectors) else [],
                 metadata={
                     "department": document.department,
                     "version": document.version,
                     "tags": document.tags,
                 },
             )
-            for index, chunk_text in enumerate(split_into_chunks(document.content))
+            for index, chunk_text in enumerate(chunk_texts)
         ]

@@ -105,6 +105,7 @@ class Chunk(BaseModel):
     text: str
     chunk_index: int
     tokens: list[str]
+    embedding: list[float] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -119,6 +120,7 @@ class RetrievalResult(BaseModel):
     retrieval_method: str = "hybrid"
     keyword_score: float = 0.0
     semantic_score: float = 0.0
+    semantic_source: str = "heuristic"
     rerank_score: float = 0.0
     coverage_score: float = 0.0
     matched_query: str = ""
@@ -225,4 +227,8 @@ class SystemStats(BaseModel):
     grounding_threshold: float
     llm_provider: str
     llm_model: str
+    embedding_provider: str = ""
+    embedding_model: str = ""
+    embedded_chunks: int = 0
     api_key_configured: bool = False
+    embedding_api_key_configured: bool = False
