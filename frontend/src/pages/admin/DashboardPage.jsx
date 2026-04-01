@@ -153,7 +153,7 @@ export function DashboardPage() {
           <span className="hero-pill">运营总览</span>
           <h2>检索与向量化后台</h2>
           <p>
-            这里集中看知识库的向量覆盖率、检索参数、Embedding 接入状态，以及一键补建老文档向量的执行入口。
+            这里集中看知识库的向量覆盖率、检索参数、向量服务接入状态，以及一键补建老文档向量的执行入口。
           </p>
         </div>
       </section>
@@ -177,7 +177,7 @@ export function DashboardPage() {
         <article className="metric-card">
           <span>已向量化片段</span>
           <strong>{stats?.embedded_chunks ?? 0}</strong>
-          <small>已经写入真实 Embedding 的片段数。</small>
+          <small>已经写入真实向量的片段数。</small>
         </article>
         <article className="metric-card">
           <span>待补建文档</span>
@@ -187,12 +187,12 @@ export function DashboardPage() {
         <article className="metric-card">
           <span>版本落后文档</span>
           <strong>{stats?.stale_embedding_documents ?? 0}</strong>
-          <small>向量版本与当前 Embedding 配置不一致。</small>
+          <small>向量版本与当前向量模型配置不一致。</small>
         </article>
         <article className="metric-card">
           <span>向量维度</span>
           <strong>{stats?.embedding_dimensions || "-"}</strong>
-          <small>当前 Embedding 模型输出的向量维度。</small>
+          <small>当前向量模型输出的向量维度。</small>
         </article>
       </section>
 
@@ -206,11 +206,11 @@ export function DashboardPage() {
           </div>
           <div className="definition-list compact">
             <div>
-              <span>Embedding 模型</span>
+              <span>向量模型</span>
               <strong>{stats?.embedding_model || "-"}</strong>
             </div>
             <div>
-              <span>Embedding 提供方</span>
+              <span>向量服务提供方</span>
               <strong>{stats?.embedding_provider || "-"}</strong>
             </div>
             <div>
@@ -253,7 +253,7 @@ export function DashboardPage() {
             </button>
           </div>
           {!stats?.embedding_api_key_configured ? (
-            <div className="global-notice">当前还没有配置 Embedding API Key，批量补建按钮会保持禁用。</div>
+            <div className="global-notice">当前还没有配置向量服务 API Key，批量补建按钮会保持禁用。</div>
           ) : null}
           {bulkResult ? (
             <div className="detail-stack">
@@ -354,11 +354,11 @@ export function DashboardPage() {
               <strong>{modelCatalog?.active_model || stats?.llm_model || "-"}</strong>
             </div>
             <div>
-              <span>Embedding 模型</span>
+              <span>向量模型</span>
               <strong>{stats?.embedding_model || "-"}</strong>
             </div>
             <div>
-              <span>Embedding 鉴权</span>
+              <span>向量服务鉴权</span>
               <strong>{stats?.embedding_api_key_configured ? "已配置" : "未配置"}</strong>
             </div>
           </div>
@@ -399,7 +399,7 @@ export function DashboardPage() {
             <article className="chunk-card">
               <strong>当前向量策略</strong>
               <p>
-                已有真实向量的片段优先使用 Embedding 相似度；老文档若还没补建，会自动回退到轻量语义打分，不会直接失效。
+                已有真实向量的片段优先使用向量相似度；老文档若还没补建，会自动回退到轻量语义打分，不会直接失效。
               </p>
             </article>
           </div>

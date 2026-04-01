@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChatComposer } from "../components/chat/ChatComposer";
 import { MessageList } from "../components/chat/MessageList";
@@ -39,6 +39,7 @@ export function ChatPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamStatus, setStreamStatus] = useState("");
   const [citationMap, setCitationMap] = useState({});
+  const threadEndRef = useRef(null);
 
   const currentConversation = useMemo(
     () => conversations.find((item) => item.id === conversationId) || null,
@@ -67,6 +68,16 @@ export function ChatPage() {
         navigate("/chat");
       });
   }, [conversationId, currentConversation, navigate]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      threadEndRef.current?.scrollIntoView({
+        block: "end",
+        behavior: messages.length > 1 ? "smooth" : "auto",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages, isStreaming, streamStatus]);
 
   async function handleSendMessage(event) {
     event.preventDefault();
@@ -146,42 +157,61 @@ export function ChatPage() {
         </div>
       </header>
 
-      <section className="chat-hero">
-        <div className="hero-copy">
-          <span className="hero-pill">RAG 智能问答</span>
-          <h2>把问题变成有依据的答案</h2>
-          <p>通过结构化提问、知识检索与流式生成，服务真实业务场景下的企业知识问答。</p>
-        </div>
-
-        <ChatComposer
-          query={query}
-          onQueryChange={setQuery}
-          onSubmit={handleSendMessage}
-          isStreaming={isStreaming}
-          streamStatus={streamStatus}
-          starterPrompts={starterPrompts}
-        />
-
-        <div className="scenario-grid">
-          {scenarioCards.map((item) => (
-            <button key={item.title} type="button" className="scenario-tile" onClick={() => setQuery(item.prompt)}>
-              <strong>{item.title}</strong>
-              <p>{item.description}</p>
-              <small>{item.prompt}</small>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="thread-panel">
-        <div className="panel-head">
-          <div>
-            <span className="panel-kicker">会话</span>
-            <h3>会话内容</h3>
+      <section className="chat-shell">
+        <section className="thread-panel thread-panel--chat">
+          <div className="panel-head chat-thread-head">
+            <div>
+              <span className="panel-kicker">当前会话</span>
+              <h3>{currentConversation?.title || "新对话"}</h3>
+            </div>
+            <span className={isStreaming ? "status-dot live" : "status-dot"}>
+              {isStreaming ? "正在流式回答" : messages.length ? `${messages.length} 条消息` : "等待你的第一个问题"}
+            </span>
           </div>
-          <span className={isStreaming ? "status-dot live" : "status-dot"}>流式输出</span>
+
+          <div className="chat-thread-scroll">
+            {messages.length ? (
+              <MessageList messages={messages} citationMap={citationMap} />
+            ) : (
+              <div className="chat-empty-state">
+                <div className="chat-empty-hero">
+                  <span className="hero-pill">RAG 智能问答</span>
+                  <h2>把问题变成有依据的答案</h2>
+                  <p>通过结构化提问、知识检索与流式生成，服务真实业务场景下的企业知识问答。</p>
+                </div>
+
+                <div className="chat-empty-grid">
+                  {scenarioCards.map((item) => (
+                    <button
+                      key={item.title}
+                      type="button"
+                      className="scenario-tile"
+                      onClick={() => setQuery(item.prompt)}
+                    >
+                      <strong>{item.title}</strong>
+                      <p>{item.description}</p>
+                      <small>{item.prompt}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div ref={threadEndRef} />
+          </div>
+        </section>
+
+        <div className="chat-dock">
+          <ChatComposer
+            className="chat-composer chat-composer--dock"
+            query={query}
+            onQueryChange={setQuery}
+            onSubmit={handleSendMessage}
+            isStreaming={isStreaming}
+            streamStatus={streamStatus}
+            starterPrompts={starterPrompts}
+            rows={3}
+          />
         </div>
-        <MessageList messages={messages} citationMap={citationMap} />
       </section>
     </div>
   );
