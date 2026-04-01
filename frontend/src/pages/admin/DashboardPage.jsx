@@ -4,8 +4,13 @@ import { formatDateTime, truncate } from "../../lib/format";
 
 const defaultPreviewQuery = "员工请假流程是什么？";
 
+function formatPercent(value) {
+  return `${Math.round((Number(value) || 0) * 100)}%`;
+}
+
 export function DashboardPage() {
   const {
+    bulkReindexDocuments,
     currentUser,
     documents,
     fetchRetrievalSettings,
@@ -16,6 +21,7 @@ export function DashboardPage() {
     updateRetrievalSettings,
     users,
   } = useAppContext();
+
   const [retrievalSettings, setRetrievalSettings] = useState(null);
   const [form, setForm] = useState({
     top_k: 5,
@@ -30,6 +36,8 @@ export function DashboardPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewResults, setPreviewResults] = useState([]);
   const [previewUnderstanding, setPreviewUnderstanding] = useState(null);
+  const [bulkLoading, setBulkLoading] = useState("");
+  const [bulkResult, setBulkResult] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,13 +118,41 @@ export function DashboardPage() {
     }
   }
 
+  async function handleBulkReindex(mode) {
+    setBulkLoading(mode);
+    try {
+      const result = await bulkReindexDocuments(mode);
+      setBulkResult(result);
+      if (result.failed_documents.length) {
+        setGlobalNotice(`批量补建完成，但有 ${result.failed_documents.length} 篇文档失败`);
+      } else if (mode === "all") {
+        setGlobalNotice(`全量重建完成，共处理 ${result.processed_documents} 篇文档`);
+      } else {
+        setGlobalNotice(`向量补建完成，共处理 ${result.processed_documents} 篇文档`);
+      }
+    } catch (error) {
+      setGlobalNotice(error.message || "批量补建失败");
+    } finally {
+      setBulkLoading("");
+    }
+  }
+
+  const missingEmbeddingDocuments = documents.filter((item) => !item.embedding_ready);
+  const weightTotal = Number(form.keyword_weight) + Number(form.semantic_weight);
+  const effectiveKeywordWeight = weightTotal > 0 ? Number(form.keyword_weight) / weightTotal : 0.5;
+  const effectiveSemanticWeight = weightTotal > 0 ? Number(form.semantic_weight) / weightTotal : 0.5;
+  const candidateRatio =
+    Number(form.top_k) > 0 ? (Number(form.candidate_k) / Number(form.top_k)).toFixed(1) : "-";
+
   return (
     <div className="admin-content">
       <section className="dashboard-hero">
         <div>
           <span className="hero-pill">运营总览</span>
-          <h2>后台运行概览</h2>
-          <p>集中查看知识库规模、模型运行状态、向量召回接入情况，以及当前检索链路的关键参数。</p>
+          <h2>检索与向量化后台</h2>
+          <p>
+            这里集中看知识库的向量覆盖率、检索参数、Embedding 接入状态，以及一键补建老文档向量的执行入口。
+          </p>
         </div>
       </section>
 
@@ -124,22 +160,32 @@ export function DashboardPage() {
         <article className="metric-card">
           <span>知识文档</span>
           <strong>{stats?.documents ?? 0}</strong>
-          <small>当前纳入知识库管理的文档总数。</small>
+          <small>当前纳入管理的文档总数。</small>
         </article>
         <article className="metric-card">
           <span>索引片段</span>
           <strong>{stats?.indexed_chunks ?? 0}</strong>
-          <small>当前可被检索命中的文档片段数量。</small>
+          <small>当前可参与检索的片段数。</small>
+        </article>
+        <article className="metric-card">
+          <span>已向量化文档</span>
+          <strong>{stats?.embedded_documents ?? 0}</strong>
+          <small>至少存在一个真实向量片段的文档数。</small>
         </article>
         <article className="metric-card">
           <span>已向量化片段</span>
           <strong>{stats?.embedded_chunks ?? 0}</strong>
-          <small>已经写入真实 embedding 的片段数量。</small>
+          <small>已经写入真实 Embedding 的片段数。</small>
         </article>
         <article className="metric-card">
-          <span>检索 top-k</span>
-          <strong>{stats?.retrieval_top_k ?? "-"}</strong>
-          <small>最终返回给生成模型的证据条数上限。</small>
+          <span>待补建文档</span>
+          <strong>{stats?.pending_embedding_documents ?? 0}</strong>
+          <small>仍缺少真实向量的历史文档数。</small>
+        </article>
+        <article className="metric-card">
+          <span>向量维度</span>
+          <strong>{stats?.embedding_dimensions || "-"}</strong>
+          <small>当前 Embedding 模型输出的向量维度。</small>
         </article>
       </section>
 
@@ -147,22 +193,117 @@ export function DashboardPage() {
         <article className="panel-card">
           <div className="panel-head">
             <div>
-              <span className="panel-kicker">知识快照</span>
-              <h3>最近文档</h3>
+              <span className="panel-kicker">向量治理</span>
+              <h3>批量补建入口</h3>
+            </div>
+          </div>
+          <div className="definition-list compact">
+            <div>
+              <span>Embedding 模型</span>
+              <strong>{stats?.embedding_model || "-"}</strong>
+            </div>
+            <div>
+              <span>Embedding 提供方</span>
+              <strong>{stats?.embedding_provider || "-"}</strong>
+            </div>
+            <div>
+              <span>鉴权状态</span>
+              <strong>{stats?.embedding_api_key_configured ? "已配置" : "未配置"}</strong>
+            </div>
+            <div>
+              <span>待补建文档</span>
+              <strong>{missingEmbeddingDocuments.length}</strong>
+            </div>
+          </div>
+          <div className="inline-actions">
+            <button
+              type="button"
+              className="primary-action"
+              disabled={bulkLoading === "missing_embeddings" || !stats?.embedding_api_key_configured}
+              onClick={() => handleBulkReindex("missing_embeddings")}
+            >
+              {bulkLoading === "missing_embeddings" ? "补建中..." : "仅补齐缺失向量"}
+            </button>
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={bulkLoading === "all" || !stats?.embedding_api_key_configured}
+              onClick={() => handleBulkReindex("all")}
+            >
+              {bulkLoading === "all" ? "重建中..." : "全量重建全部文档"}
+            </button>
+          </div>
+          {!stats?.embedding_api_key_configured ? (
+            <div className="global-notice">当前还没有配置 Embedding API Key，批量补建按钮会保持禁用。</div>
+          ) : null}
+          {bulkResult ? (
+            <div className="detail-stack">
+              <div className="definition-list">
+                <div>
+                  <span>本次模式</span>
+                  <strong>{bulkResult.mode === "all" ? "全量重建" : "仅补缺失向量"}</strong>
+                </div>
+                <div>
+                  <span>命中文档</span>
+                  <strong>{bulkResult.requested_documents}</strong>
+                </div>
+                <div>
+                  <span>成功处理</span>
+                  <strong>{bulkResult.processed_documents}</strong>
+                </div>
+                <div>
+                  <span>跳过数量</span>
+                  <strong>{bulkResult.skipped_documents}</strong>
+                </div>
+                <div>
+                  <span>重建片段</span>
+                  <strong>{bulkResult.total_chunks_created}</strong>
+                </div>
+                <div>
+                  <span>失败数量</span>
+                  <strong>{bulkResult.failed_documents.length}</strong>
+                </div>
+              </div>
+              {bulkResult.failed_documents.length ? (
+                <div className="chunk-list">
+                  {bulkResult.failed_documents.slice(0, 4).map((item) => (
+                    <article key={item.document_id} className="chunk-card">
+                      <strong>{item.title}</strong>
+                      <p>{item.error}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </article>
+
+        <article className="panel-card">
+          <div className="panel-head">
+            <div>
+              <span className="panel-kicker">覆盖情况</span>
+              <h3>待补建文档</h3>
             </div>
           </div>
           <div className="chunk-list">
-            {documents.slice(0, 5).map((document) => (
-              <article key={document.id} className="chunk-card">
-                <strong>{document.title}</strong>
-                <p>
-                  {document.department} / {document.chunk_count || 0} 个片段 / {document.index_state_label}
-                </p>
-              </article>
-            ))}
+            {missingEmbeddingDocuments.length ? (
+              missingEmbeddingDocuments.slice(0, 6).map((document) => (
+                <article key={document.id} className="chunk-card">
+                  <strong>{document.title}</strong>
+                  <p>{document.embedding_label}</p>
+                  <small>
+                    已向量化 {document.embedded_chunk_count} / {document.chunk_count} 个片段
+                  </small>
+                </article>
+              ))
+            ) : (
+              <div className="table-empty">当前所有已索引文档都已经补齐真实向量了。</div>
+            )}
           </div>
         </article>
+      </section>
 
+      <section className="admin-grid two-columns">
         <article className="panel-card">
           <div className="panel-head">
             <div>
@@ -195,6 +336,47 @@ export function DashboardPage() {
               <span>Embedding 鉴权</span>
               <strong>{stats?.embedding_api_key_configured ? "已配置" : "未配置"}</strong>
             </div>
+          </div>
+        </article>
+
+        <article className="panel-card">
+          <div className="panel-head">
+            <div>
+              <span className="panel-kicker">参数提示</span>
+              <h3>检索参数解读</h3>
+            </div>
+          </div>
+          <div className="definition-list">
+            <div>
+              <span>有效关键词权重</span>
+              <strong>{formatPercent(effectiveKeywordWeight)}</strong>
+            </div>
+            <div>
+              <span>有效语义权重</span>
+              <strong>{formatPercent(effectiveSemanticWeight)}</strong>
+            </div>
+            <div>
+              <span>候选倍率</span>
+              <strong>{candidateRatio} 倍</strong>
+            </div>
+            <div>
+              <span>当前最小召回分</span>
+              <strong>{Number(form.min_score).toFixed(2)}</strong>
+            </div>
+          </div>
+          <div className="chunk-list">
+            <article className="chunk-card">
+              <strong>如何理解这些参数</strong>
+              <p>
+                `candidate_k` 越大，召回范围越广；`top_k` 越小，送给大模型的证据越精简。关键词和语义权重会先归一化再参与混合打分。
+              </p>
+            </article>
+            <article className="chunk-card">
+              <strong>当前向量策略</strong>
+              <p>
+                已有真实向量的片段优先使用 Embedding 相似度；老文档若还没补建，会自动回退到轻量语义打分，不会直接失效。
+              </p>
+            </article>
           </div>
         </article>
       </section>

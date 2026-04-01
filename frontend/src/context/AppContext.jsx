@@ -211,3 +211,157 @@ export function AppProvider({ children }) {
     await refreshConversations();
     await refreshStats();
   }
+
+  async function uploadDocumentFile(file) {
+    const data = await uploadFile("/documents/upload", file);
+    await refreshDocuments();
+    await refreshStats();
+    return data;
+  }
+
+  async function reindexDocument(documentId) {
+    const data = await fetchJson(`/documents/${documentId}/reindex`, {
+      method: "POST",
+    });
+    await refreshDocuments();
+    await refreshStats();
+    return data;
+  }
+
+  async function bulkReindexDocuments(mode = "missing_embeddings") {
+    const data = await fetchJson("/documents/reindex-batch", {
+      method: "POST",
+      body: { mode },
+    });
+    await refreshDocuments();
+    await refreshStats();
+    return data;
+  }
+
+  async function deleteDocument(documentId) {
+    await fetchJson(`/documents/${documentId}`, {
+      method: "DELETE",
+    });
+    await refreshDocuments();
+    await refreshStats();
+  }
+
+  async function fetchDocument(documentId) {
+    return fetchJson(`/documents/${documentId}`);
+  }
+
+  async function fetchDocumentStatus(documentId) {
+    return fetchJson(`/documents/${documentId}/status`);
+  }
+
+  async function fetchUploadTask(taskId) {
+    return fetchJson(`/documents/upload/tasks/${taskId}`);
+  }
+
+  async function fetchAgentTasks(params = {}) {
+    const data = await fetchJson(withQuery("/tasks", params));
+    return data.tasks;
+  }
+
+  async function fetchAgentTask(taskId) {
+    return fetchJson(`/tasks/${taskId}`);
+  }
+
+  async function fetchRetrievalSettings() {
+    const data = await fetchJson("/retrieval/settings");
+    return data.settings;
+  }
+
+  async function updateRetrievalSettings(payload) {
+    const data = await fetchJson("/retrieval/settings", {
+      method: "POST",
+      body: payload,
+    });
+    await refreshStats();
+    return data.settings;
+  }
+
+  async function previewRetrieval(query, topK) {
+    return fetchJson("/retrieval/preview", {
+      method: "POST",
+      body: {
+        query,
+        top_k: topK || null,
+      },
+    });
+  }
+
+  async function selectModel(modelId) {
+    const data = await fetchJson("/models/select", {
+      method: "POST",
+      body: { model_id: modelId },
+    });
+    setModelCatalog(data.catalog);
+    await refreshStats();
+    return data.catalog;
+  }
+
+  async function runEvaluation() {
+    const data = await fetchJson("/evaluate/run", {
+      method: "POST",
+    });
+    setEvaluationRun(data.run);
+    await refreshStats();
+    await refreshConversations();
+    return data.run;
+  }
+
+  return (
+    <AppContext.Provider
+      value={{
+        appError,
+        bootstrapping,
+        bulkReindexDocuments,
+        conversations,
+        createConversation,
+        currentUser,
+        deleteConversation,
+        deleteDocument,
+        documents,
+        evaluationRun,
+        fetchDocument,
+        fetchDocumentStatus,
+        fetchRetrievalSettings,
+        fetchAgentTask,
+        fetchAgentTasks,
+        fetchUploadTask,
+        globalNotice,
+        isAdmin,
+        isAuthenticated,
+        login,
+        logout,
+        modelCatalog,
+        previewRetrieval,
+        queryDocuments,
+        refreshApp,
+        refreshConversations,
+        refreshDocuments,
+        refreshStats,
+        refreshUsers,
+        reindexDocument,
+        runEvaluation,
+        selectModel,
+        setGlobalNotice,
+        stats,
+        updateRetrievalSettings,
+        uploadDocumentFile,
+        users,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
+}
+
+export function useAppContext() {
+  const value = useContext(AppContext);
+  if (!value) {
+    throw new Error("useAppContext must be used inside AppProvider");
+  }
+  return value;
+}

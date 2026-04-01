@@ -21,6 +21,7 @@ class EmbeddingService:
             "provider": settings.embedding_provider,
             "model": settings.embedding_model,
             "base_url": settings.embedding_base_url,
+            "dimensions": settings.embedding_dimensions,
             "api_key_configured": bool(settings.embedding_api_key),
             "enabled": self.is_enabled(),
         }

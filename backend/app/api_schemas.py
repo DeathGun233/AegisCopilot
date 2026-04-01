@@ -29,6 +29,10 @@ class DocumentSummary(Document):
     indexed: bool = False
     index_state_label: str = "待索引"
     indexed_label: str = "未索引"
+    embedded_chunk_count: int = 0
+    missing_embedding_chunks: int = 0
+    embedding_ready: bool = False
+    embedding_label: str = ""
     source_label: str = ""
     tag_count: int = 0
     content_preview: str = ""
@@ -70,6 +74,25 @@ class ReindexResponse(BaseModel):
     document: DocumentSummary
     task: DocumentTaskSummary
     chunks_created: int
+
+
+class BulkReindexRequest(BaseModel):
+    mode: str = "missing_embeddings"
+
+
+class BulkReindexFailure(BaseModel):
+    document_id: str
+    title: str
+    error: str
+
+
+class BulkReindexResponse(BaseModel):
+    mode: str
+    requested_documents: int
+    processed_documents: int
+    skipped_documents: int
+    total_chunks_created: int
+    failed_documents: list[BulkReindexFailure] = Field(default_factory=list)
 
 
 class ChatRequest(BaseModel):

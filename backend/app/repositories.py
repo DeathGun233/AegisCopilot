@@ -138,6 +138,18 @@ class DocumentRepository:
     def count_chunks_for_document(self, document_id: str) -> int:
         return sum(1 for chunk in self._chunks.values() if chunk.document_id == document_id)
 
+    def count_embedded_chunks_for_document(self, document_id: str) -> int:
+        return sum(1 for chunk in self._chunks.values() if chunk.document_id == document_id and chunk.embedding)
+
+    def get_chunk_stats(self) -> dict[str, dict[str, int]]:
+        stats: dict[str, dict[str, int]] = {}
+        for chunk in self._chunks.values():
+            item = stats.setdefault(chunk.document_id, {"chunk_count": 0, "embedded_chunk_count": 0})
+            item["chunk_count"] += 1
+            if chunk.embedding:
+                item["embedded_chunk_count"] += 1
+        return stats
+
     def _reconcile_document_index_state(self) -> None:
         chunk_counts: dict[str, int] = {}
         for chunk in self._chunks.values():

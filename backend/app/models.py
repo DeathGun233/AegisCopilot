@@ -229,6 +229,9 @@ class SystemStats(BaseModel):
     llm_model: str
     embedding_provider: str = ""
     embedding_model: str = ""
+    embedding_dimensions: int = 0
+    embedded_documents: int = 0
     embedded_chunks: int = 0
+    pending_embedding_documents: int = 0
     api_key_configured: bool = False
     embedding_api_key_configured: bool = False

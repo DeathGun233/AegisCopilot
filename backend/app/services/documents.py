@@ -116,6 +116,54 @@ class DocumentService:
         chunks_created = self._index_document(document, task)
         return document, task, chunks_created
 
+    def bulk_reindex(self, *, user_id: str, mode: str) -> dict[str, object]:
+        normalized_mode = mode.strip().lower() or "missing_embeddings"
+        if normalized_mode not in {"all", "missing_embeddings"}:
+            raise ValueError("mode 仅支持 all 或 missing_embeddings")
+
+        documents = self.repo.list_documents()
+        chunk_stats = self.repo.get_chunk_stats()
+        selected: list[Document] = []
+        skipped_documents = 0
+        for document in documents:
+            stats = chunk_stats.get(document.id, {"chunk_count": 0, "embedded_chunk_count": 0})
+            chunk_count = int(stats["chunk_count"])
+            embedded_chunk_count = int(stats["embedded_chunk_count"])
+            needs_embedding_backfill = chunk_count == 0 or embedded_chunk_count < chunk_count
+            if normalized_mode == "all":
+                selected.append(document)
+            elif needs_embedding_backfill:
+                selected.append(document)
+            else:
+                skipped_documents += 1
+
+        failures: list[dict[str, str]] = []
+        processed_documents = 0
+        total_chunks_created = 0
+        for document in selected:
+            try:
+                _, _, chunks_created = self.reindex_document(document.id, user_id)
+            except Exception as exc:
+                failures.append(
+                    {
+                        "document_id": document.id,
+                        "title": document.title,
+                        "error": str(exc),
+                    }
+                )
+                continue
+            processed_documents += 1
+            total_chunks_created += chunks_created
+
+        return {
+            "mode": normalized_mode,
+            "requested_documents": len(selected),
+            "processed_documents": processed_documents,
+            "skipped_documents": skipped_documents,
+            "total_chunks_created": total_chunks_created,
+            "failed_documents": failures,
+        }
+
     def index_document(self, document_id: str) -> int:
         document = self.repo.get_document(document_id)
         if document is None:
