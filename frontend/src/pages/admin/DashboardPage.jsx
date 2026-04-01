@@ -126,9 +126,11 @@ export function DashboardPage() {
       if (result.failed_documents.length) {
         setGlobalNotice(`批量补建完成，但有 ${result.failed_documents.length} 篇文档失败`);
       } else if (mode === "all") {
-        setGlobalNotice(`全量重建完成，共处理 ${result.processed_documents} 篇文档`);
+        setGlobalNotice(`全量重建任务已排队，共 ${result.queued_documents} 篇文档`);
+      } else if (mode === "outdated_embeddings") {
+        setGlobalNotice(`版本升级任务已排队，共 ${result.queued_documents} 篇文档`);
       } else {
-        setGlobalNotice(`向量补建完成，共处理 ${result.processed_documents} 篇文档`);
+        setGlobalNotice(`向量补建任务已排队，共 ${result.queued_documents} 篇文档`);
       }
     } catch (error) {
       setGlobalNotice(error.message || "批量补建失败");
@@ -183,6 +185,11 @@ export function DashboardPage() {
           <small>仍缺少真实向量的历史文档数。</small>
         </article>
         <article className="metric-card">
+          <span>版本落后文档</span>
+          <strong>{stats?.stale_embedding_documents ?? 0}</strong>
+          <small>向量版本与当前 Embedding 配置不一致。</small>
+        </article>
+        <article className="metric-card">
           <span>向量维度</span>
           <strong>{stats?.embedding_dimensions || "-"}</strong>
           <small>当前 Embedding 模型输出的向量维度。</small>
@@ -214,6 +221,10 @@ export function DashboardPage() {
               <span>待补建文档</span>
               <strong>{missingEmbeddingDocuments.length}</strong>
             </div>
+            <div>
+              <span>当前向量版本</span>
+              <strong>{stats?.current_embedding_version || "-"}</strong>
+            </div>
           </div>
           <div className="inline-actions">
             <button
@@ -223,6 +234,14 @@ export function DashboardPage() {
               onClick={() => handleBulkReindex("missing_embeddings")}
             >
               {bulkLoading === "missing_embeddings" ? "补建中..." : "仅补齐缺失向量"}
+            </button>
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={bulkLoading === "outdated_embeddings" || !stats?.embedding_api_key_configured}
+              onClick={() => handleBulkReindex("outdated_embeddings")}
+            >
+              {bulkLoading === "outdated_embeddings" ? "升级中..." : "升级过期向量版本"}
             </button>
             <button
               type="button"
@@ -241,23 +260,29 @@ export function DashboardPage() {
               <div className="definition-list">
                 <div>
                   <span>本次模式</span>
-                  <strong>{bulkResult.mode === "all" ? "全量重建" : "仅补缺失向量"}</strong>
+                  <strong>
+                    {bulkResult.mode === "all"
+                      ? "全量重建"
+                      : bulkResult.mode === "outdated_embeddings"
+                        ? "升级过期向量版本"
+                        : "仅补缺失向量"}
+                  </strong>
                 </div>
                 <div>
                   <span>命中文档</span>
                   <strong>{bulkResult.requested_documents}</strong>
                 </div>
                 <div>
-                  <span>成功处理</span>
-                  <strong>{bulkResult.processed_documents}</strong>
+                  <span>已排队任务</span>
+                  <strong>{bulkResult.queued_documents}</strong>
                 </div>
                 <div>
                   <span>跳过数量</span>
                   <strong>{bulkResult.skipped_documents}</strong>
                 </div>
                 <div>
-                  <span>重建片段</span>
-                  <strong>{bulkResult.total_chunks_created}</strong>
+                  <span>当前活跃任务</span>
+                  <strong>{bulkResult.active_tasks}</strong>
                 </div>
                 <div>
                   <span>失败数量</span>

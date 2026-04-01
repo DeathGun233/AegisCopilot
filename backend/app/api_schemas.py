@@ -32,6 +32,8 @@ class DocumentSummary(Document):
     embedded_chunk_count: int = 0
     missing_embedding_chunks: int = 0
     embedding_ready: bool = False
+    embedding_stale: bool = False
+    current_embedding_version: str = ""
     embedding_label: str = ""
     source_label: str = ""
     tag_count: int = 0
@@ -89,9 +91,9 @@ class BulkReindexFailure(BaseModel):
 class BulkReindexResponse(BaseModel):
     mode: str
     requested_documents: int
-    processed_documents: int
+    queued_documents: int
     skipped_documents: int
-    total_chunks_created: int
+    active_tasks: int
     failed_documents: list[BulkReindexFailure] = Field(default_factory=list)
 
 

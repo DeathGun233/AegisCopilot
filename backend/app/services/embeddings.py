@@ -9,6 +9,11 @@ from .text import normalize_text
 
 
 class EmbeddingService:
+    def get_version(self) -> str:
+        if not self.is_enabled():
+            return "disabled"
+        return f"{settings.embedding_provider}:{settings.embedding_model}:{settings.embedding_dimensions}"
+
     def is_enabled(self) -> bool:
         return (
             settings.embedding_provider == "openai-compatible"
@@ -22,6 +27,7 @@ class EmbeddingService:
             "model": settings.embedding_model,
             "base_url": settings.embedding_base_url,
             "dimensions": settings.embedding_dimensions,
+            "version": self.get_version(),
             "api_key_configured": bool(settings.embedding_api_key),
             "enabled": self.is_enabled(),
         }

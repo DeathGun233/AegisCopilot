@@ -152,8 +152,16 @@ class DocumentRepository:
 
     def _reconcile_document_index_state(self) -> None:
         chunk_counts: dict[str, int] = {}
+        embedded_chunk_counts: dict[str, int] = {}
+        embedding_versions: dict[str, str] = {}
         for chunk in self._chunks.values():
             chunk_counts[chunk.document_id] = chunk_counts.get(chunk.document_id, 0) + 1
+            if chunk.embedding:
+                embedded_chunk_counts[chunk.document_id] = embedded_chunk_counts.get(chunk.document_id, 0) + 1
+                if not chunk.embedding_version:
+                    chunk.embedding_version = "legacy"
+                if chunk.document_id not in embedding_versions and chunk.embedding_version:
+                    embedding_versions[chunk.document_id] = chunk.embedding_version
 
         for document in self._documents.values():
             chunk_count = chunk_counts.get(document.id, 0)
@@ -162,6 +170,10 @@ class DocumentRepository:
                 document.index_state = normalized_state
                 if normalized_state == DocumentIndexState.indexed and document.updated_at < (document.indexed_at or document.updated_at):
                     document.updated_at = document.indexed_at or utc_now()
+                self._documents_dirty = True
+            embedded_chunk_count = embedded_chunk_counts.get(document.id, 0)
+            if embedded_chunk_count > 0 and not document.embedding_version:
+                document.embedding_version = embedding_versions.get(document.id, "legacy")
                 self._documents_dirty = True
 
     @staticmethod

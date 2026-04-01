@@ -16,11 +16,16 @@ function sourceLabel(document) {
   return document.source_label?.split(" / ")[0] || document.source_type || "-";
 }
 
+function isTaskActive(task) {
+  return task && (task.status === "pending" || task.status === "running");
+}
+
 export function KnowledgePage() {
   const navigate = useNavigate();
   const {
     deleteDocument,
     documents,
+    fetchUploadTask,
     queryDocuments,
     reindexDocument,
     setGlobalNotice,
@@ -44,7 +49,8 @@ export function KnowledgePage() {
     const indexed = rows.filter((item) => item.index_state === "indexed").length;
     const failed = rows.filter((item) => item.index_state === "failed").length;
     const pending = rows.filter((item) => item.index_state === "pending" || item.index_state === "indexing").length;
-    return { total, indexed, failed, pending };
+    const stale = rows.filter((item) => item.embedding_stale).length;
+    return { total, indexed, failed, pending, stale };
   }, [rows]);
 
   useEffect(() => {
@@ -74,6 +80,36 @@ export function KnowledgePage() {
     };
   }, [filters, queryDocuments, setGlobalNotice]);
 
+  useEffect(() => {
+    if (!latestTask || !isTaskActive(latestTask)) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(async () => {
+      try {
+        const [taskResponse, rowsResponse] = await Promise.all([
+          fetchUploadTask(latestTask.id),
+          queryDocuments(filters),
+        ]);
+        setLatestTask(taskResponse.task);
+        setRows(rowsResponse);
+        if (!isTaskActive(taskResponse.task)) {
+          const title = taskResponse.task.document_title || "当前文档";
+          if (taskResponse.task.status === "succeeded") {
+            setGlobalNotice(`《${title}》后台索引已完成，共 ${taskResponse.task.chunks_created} 个片段。`);
+          } else if (taskResponse.task.status === "failed") {
+            setGlobalNotice(taskResponse.task.error || `《${title}》索引失败`);
+          }
+          window.clearInterval(timer);
+        }
+      } catch {
+        window.clearInterval(timer);
+      }
+    }, 2500);
+
+    return () => window.clearInterval(timer);
+  }, [fetchUploadTask, filters, latestTask, queryDocuments, setGlobalNotice]);
+
   function updateFilter(key, value) {
     setFilters((current) => ({ ...current, [key]: value }));
   }
@@ -84,12 +120,12 @@ export function KnowledgePage() {
       return;
     }
     setBusyAction(`upload:${file.name}`);
-    setGlobalNotice(`正在导入 ${file.name}...`);
+    setGlobalNotice(`正在导入 ${file.name}，后台会继续完成索引。`);
     try {
       const result = await uploadDocumentFile(file);
       setLatestTask(result.task);
       setRows(await queryDocuments(filters));
-      setGlobalNotice(`已导入《${result.document.title}》，生成 ${result.chunks_created} 个片段。`);
+      setGlobalNotice(`《${result.document.title}》已入库，索引任务已排队。`);
     } catch (error) {
       setGlobalNotice(error.message || "文档上传失败");
     } finally {
@@ -100,12 +136,11 @@ export function KnowledgePage() {
 
   async function handleReindex(document) {
     setBusyAction(`reindex:${document.id}`);
-    setGlobalNotice(`正在为《${document.title}》重建索引...`);
+    setGlobalNotice(`《${document.title}》已加入后台索引队列。`);
     try {
       const result = await reindexDocument(document.id);
       setLatestTask(result.task);
       setRows(await queryDocuments(filters));
-      setGlobalNotice(`《${document.title}》已完成重建索引，共 ${result.chunks_created} 个片段。`);
     } catch (error) {
       setGlobalNotice(error.message || "重建索引失败");
     } finally {
@@ -136,7 +171,7 @@ export function KnowledgePage() {
         <div>
           <span className="hero-pill">知识库治理</span>
           <h2>知识库管理后台</h2>
-          <p>按部门、标签、来源和状态筛选文档，查看索引状态，并支持重建索引与文档排查。</p>
+          <p>按部门、标签、来源和状态筛选文档，查看后台索引进度，并识别哪些文档需要补齐向量或升级到当前向量版本。</p>
         </div>
 
         <div className="hero-actions">
@@ -161,7 +196,12 @@ export function KnowledgePage() {
         <article className="metric-card">
           <span>处理中</span>
           <strong>{summary.pending}</strong>
-          <small>待索引或索引中的文档数量。</small>
+          <small>正在排队或后台处理中。</small>
+        </article>
+        <article className="metric-card">
+          <span>向量过期</span>
+          <strong>{summary.stale}</strong>
+          <small>已索引但向量版本落后的文档。</small>
         </article>
         <article className="metric-card">
           <span>失败</span>
@@ -177,7 +217,15 @@ export function KnowledgePage() {
               <span className="panel-kicker">最近任务</span>
               <h3>{latestTask.kind_label}</h3>
             </div>
-            <span className={`state-badge ${latestTask.status === "succeeded" ? "indexed" : "pending"}`}>
+            <span
+              className={`state-badge ${
+                latestTask.status === "succeeded"
+                  ? "indexed"
+                  : latestTask.status === "failed"
+                    ? "failed"
+                    : "pending"
+              }`}
+            >
               {latestTask.status_label}
             </span>
           </div>
@@ -291,6 +339,7 @@ export function KnowledgePage() {
                         {document.index_state_label}
                       </span>
                       <small>{document.indexed_label}</small>
+                      <small>{document.embedding_label}</small>
                     </div>
                     <div className="detail-stack compact-gap">
                       <strong>{document.last_task?.kind_label || "暂无任务"}</strong>
@@ -307,7 +356,7 @@ export function KnowledgePage() {
                         onClick={() => handleReindex(document)}
                         disabled={reindexBusy}
                       >
-                        {reindexBusy ? "重建中..." : "重建索引"}
+                        {reindexBusy ? "排队中..." : "重建索引"}
                       </button>
                       <button
                         type="button"

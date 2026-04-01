@@ -93,6 +93,7 @@ class Document(BaseModel):
     updated_at: datetime = Field(default_factory=utc_now)
     indexed_at: datetime | None = None
     index_state: DocumentIndexState = DocumentIndexState.pending
+    embedding_version: str = ""
     last_index_error: str = ""
     last_task_id: str | None = None
     last_upload_task_id: str | None = None
@@ -106,6 +107,7 @@ class Chunk(BaseModel):
     chunk_index: int
     tokens: list[str]
     embedding: list[float] = Field(default_factory=list)
+    embedding_version: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -194,6 +196,8 @@ class DocumentTask(BaseModel):
     message: str = ""
     error: str = ""
     chunks_created: int = 0
+    queued_at: datetime | None = None
+    started_at: datetime | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     completed_at: datetime | None = None
@@ -229,9 +233,11 @@ class SystemStats(BaseModel):
     llm_model: str
     embedding_provider: str = ""
     embedding_model: str = ""
+    current_embedding_version: str = ""
     embedding_dimensions: int = 0
     embedded_documents: int = 0
     embedded_chunks: int = 0
     pending_embedding_documents: int = 0
+    stale_embedding_documents: int = 0
     api_key_configured: bool = False
     embedding_api_key_configured: bool = False

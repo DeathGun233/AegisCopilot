@@ -156,8 +156,15 @@ def _build_document_summary(document: Document, chunk_count: int, task: Document
     indexed = document.index_state == DocumentIndexState.indexed and bool(document.indexed_at)
     preview = normalize_text(document.content)[:160]
     container = get_container()
+    current_embedding_version = container.document_service.get_current_embedding_version()
     embedded_chunk_count = container.documents.count_embedded_chunks_for_document(document.id)
     missing_embedding_chunks = max(chunk_count - embedded_chunk_count, 0)
+    embedding_stale = (
+        container.embedding_service.is_enabled()
+        and chunk_count > 0
+        and embedded_chunk_count > 0
+        and document.embedding_version != current_embedding_version
+    )
     if document.index_state == DocumentIndexState.indexed:
         indexed_label = f"已索引，共 {chunk_count} 个片段"
     elif document.index_state == DocumentIndexState.failed and document.last_index_error:
@@ -170,6 +177,8 @@ def _build_document_summary(document: Document, chunk_count: int, task: Document
         embedding_label = "已索引，但暂无可向量化片段"
     elif chunk_count <= 0:
         embedding_label = "尚未完成索引，暂不可向量化"
+    elif embedding_stale:
+        embedding_label = "向量版本已过期，建议重建索引"
     elif missing_embedding_chunks == 0:
         embedding_label = f"向量已补齐，共 {embedded_chunk_count} 个片段"
     else:
@@ -183,7 +192,9 @@ def _build_document_summary(document: Document, chunk_count: int, task: Document
         indexed_label=indexed_label,
         embedded_chunk_count=embedded_chunk_count,
         missing_embedding_chunks=missing_embedding_chunks,
-        embedding_ready=chunk_count > 0 and missing_embedding_chunks == 0,
+        embedding_ready=chunk_count > 0 and missing_embedding_chunks == 0 and not embedding_stale,
+        embedding_stale=embedding_stale,
+        current_embedding_version=current_embedding_version,
         embedding_label=embedding_label,
         source_label=f"{_friendly_source_type(document.source_type)} / {document.department}",
         tag_count=len(document.tags),
@@ -597,7 +608,7 @@ async def upload_document(
         version="v1",
         tags=[],
     )
-    summary = _build_document_summary(document, chunks_created, task)
+    summary = _build_document_summary(document, container.documents.count_chunks_for_document(document.id), task)
     return DocumentUploadResponse(
         document=summary,
         task=_build_task_summary(task),
@@ -629,7 +640,7 @@ def reindex_document(
         document, task, chunks_created = container.document_service.reindex_document(document_id, current_user.id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在") from exc
-    summary = _build_document_summary(document, chunks_created, task)
+    summary = _build_document_summary(document, container.documents.count_chunks_for_document(document.id), task)
     return ReindexResponse(
         document=summary,
         task=_build_task_summary(task),
@@ -662,7 +673,7 @@ def index_document(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="缺少 document_id")
     container = get_container()
     try:
-        _, _, chunks_created = container.document_service.reindex_document(document_id, current_user.id)
+        chunks_created = container.document_service.index_document(document_id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在") from exc
     return IndexResponse(document_id=document_id, chunks_created=chunks_created)

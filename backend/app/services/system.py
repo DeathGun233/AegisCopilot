@@ -28,6 +28,7 @@ class SystemService:
     def get_stats(self, user: User) -> SystemStats:
         runtime = self.runtime_models.get_runtime()
         embedding_runtime = self.embeddings.get_runtime()
+        current_embedding_version = self.embeddings.get_version()
         retrieval = self.runtime_retrieval.get_settings()
         chunk_stats = self.documents.get_chunk_stats()
         conversation_count = (
@@ -38,6 +39,7 @@ class SystemService:
         task_count = len(self.tasks.list()) if user.role == UserRole.admin else len(self.tasks.list_for_user(user.id))
         embedded_documents = 0
         pending_embedding_documents = 0
+        stale_embedding_documents = 0
         for document in self.documents.list_documents():
             stats = chunk_stats.get(document.id, {"chunk_count": 0, "embedded_chunk_count": 0})
             chunk_count = int(stats["chunk_count"])
@@ -46,6 +48,13 @@ class SystemService:
                 embedded_documents += 1
             if chunk_count > 0 and embedded_chunk_count < chunk_count:
                 pending_embedding_documents += 1
+            if (
+                self.embeddings.is_enabled()
+                and chunk_count > 0
+                and embedded_chunk_count > 0
+                and document.embedding_version != current_embedding_version
+            ):
+                stale_embedding_documents += 1
         return SystemStats(
             documents=len(self.documents.list_documents()),
             indexed_chunks=len(self.documents.list_chunks()),
@@ -59,10 +68,12 @@ class SystemService:
             llm_model=str(runtime["model"]),
             embedding_provider=str(embedding_runtime["provider"]),
             embedding_model=str(embedding_runtime["model"]),
+            current_embedding_version=current_embedding_version,
             embedding_dimensions=int(embedding_runtime["dimensions"]),
             embedded_documents=embedded_documents,
             embedded_chunks=sum(1 for chunk in self.documents.list_chunks() if chunk.embedding),
             pending_embedding_documents=pending_embedding_documents,
+            stale_embedding_documents=stale_embedding_documents,
             api_key_configured=bool(runtime["api_key_configured"]),
             embedding_api_key_configured=bool(embedding_runtime["api_key_configured"]),
         )
