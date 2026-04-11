@@ -28,6 +28,9 @@ class WorkflowContext:
     retrieval_results: list = field(default_factory=list)
     answer: str = ""
     grounded: bool = False
+    generation_provider: str = ""
+    generation_degraded: bool = False
+    generation_reason: str = ""
     trace: list[dict] = field(default_factory=list)
 
 
@@ -115,9 +118,21 @@ class AgentService:
                         conversation_summary=self._summarize_history(context.conversation),
                     )
                     context.answer = ""
-                    for piece in stream:
-                        context.answer += piece
-                        yield {"type": "delta", "content": piece}
+                    for item in stream:
+                        if item.type == "metadata":
+                            context.generation_provider = item.provider
+                            context.generation_degraded = item.degraded
+                            context.generation_reason = item.fallback_reason
+                            if item.degraded:
+                                yield self._stream_status(
+                                    "模型调用失败，已切换为基于证据的降级摘要...",
+                                    stage="generation_fallback",
+                                    started_at=started_at,
+                                    degraded=True,
+                                )
+                            continue
+                        context.answer += item.content
+                        yield {"type": "delta", "content": item.content}
                 else:
                     yield self._stream_status(
                         "当前未检索到足够证据，正在整理说明...",
@@ -128,7 +143,15 @@ class AgentService:
                     context.answer = self._insufficient_evidence_answer()
                     yield {"type": "delta", "content": context.answer}
 
-        context.trace.append({"step": WorkflowStep.tool_or_answer, "answer_preview": context.answer[:180]})
+        context.trace.append(
+            {
+                "step": WorkflowStep.tool_or_answer,
+                "answer_preview": context.answer[:180],
+                "generation_provider": context.generation_provider or self.generation.provider,
+                "generation_degraded": context.generation_degraded,
+                "generation_reason": context.generation_reason,
+            }
+        )
         self._grounding_check(context)
         reply = self._finalize(context)
         task = self._build_task(conversation, query, context, reply, steps)
@@ -153,7 +176,7 @@ class AgentService:
             final_answer=reply.content,
             citations=context.retrieval_results,
             route_reason=context.route_reason,
-            provider=self.generation.provider,
+            provider=context.generation_provider or self.generation.provider,
         )
 
     @staticmethod
@@ -292,16 +315,28 @@ class AgentService:
             context.answer = self._greeting_answer()
         elif context.retrieval_results:
             supporting_results = self._select_supporting_results(context.retrieval_results)
-            context.answer = self.generation.generate(
+            result = self.generation.generate(
                 query=context.query,
                 intent=context.intent.value,
                 retrieval_results=supporting_results,
                 conversation_summary=self._summarize_history(context.conversation),
             )
+            context.answer = result.content
             context.retrieval_results = supporting_results
+            context.generation_provider = result.provider
+            context.generation_degraded = result.degraded
+            context.generation_reason = result.fallback_reason
         else:
             context.answer = self._insufficient_evidence_answer()
-        context.trace.append({"step": WorkflowStep.tool_or_answer, "answer_preview": context.answer[:180]})
+        context.trace.append(
+            {
+                "step": WorkflowStep.tool_or_answer,
+                "answer_preview": context.answer[:180],
+                "generation_provider": context.generation_provider or self.generation.provider,
+                "generation_degraded": context.generation_degraded,
+                "generation_reason": context.generation_reason,
+            }
+        )
 
     def _grounding_check(self, context: WorkflowContext) -> None:
         score = context.retrieval_results[0].score if context.retrieval_results else 0.0

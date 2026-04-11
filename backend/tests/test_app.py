@@ -95,6 +95,25 @@ def _parse_sse_frames(body: str) -> list[dict]:
     return frames
 
 
+def _with_failing_model_settings():
+    original = {
+        "llm_provider": settings.llm_provider,
+        "llm_base_url": settings.llm_base_url,
+        "llm_api_key": settings.llm_api_key,
+    }
+    settings.llm_provider = "openai-compatible"
+    settings.llm_base_url = "http://127.0.0.1:9"
+    settings.llm_api_key = "test-key"
+    reset_container()
+    return original
+
+
+def _restore_model_settings(original: dict[str, str]) -> None:
+    for key, value in original.items():
+        setattr(settings, key, value)
+    reset_container()
+
+
 def test_health(client: TestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
@@ -187,6 +206,87 @@ def test_stream_chat_reports_progress_before_answer(client: TestClient) -> None:
 
     assert retrieve_index < generate_index < first_delta_index
     assert any(event["message"].startswith("已完成检索") for event in status_events)
+
+
+def test_chat_surfaces_model_fallback(client: TestClient) -> None:
+    original = _with_failing_model_settings()
+    try:
+        headers = _login_as_admin(client)
+
+        create_response = client.post(
+            "/documents",
+            json={
+                "title": "Incident Response Guide",
+                "content": "Teams should confirm ownership, assess impact, and communicate mitigation progress.",
+                "source_type": "text",
+                "department": "ops",
+                "version": "v1",
+                "tags": ["incident"],
+            },
+            headers=headers,
+        )
+        assert create_response.status_code == 200
+        document_id = create_response.json()["document"]["id"]
+
+        index_response = client.post("/documents/index", json={"document_id": document_id}, headers=headers)
+        assert index_response.status_code == 200
+
+        chat_response = client.post(
+            "/chat",
+            json={"query": "What should incident response teams do first?"},
+            headers=headers,
+        )
+        assert chat_response.status_code == 200
+        payload = chat_response.json()
+
+        assert payload["task"]["provider"] == "mock-fallback"
+        assert "模型服务不可用" in payload["reply"]["content"]
+        assert any(item.get("generation_degraded") is True for item in payload["task"]["trace"])
+    finally:
+        _restore_model_settings(original)
+
+
+def test_stream_chat_surfaces_model_fallback(client: TestClient) -> None:
+    original = _with_failing_model_settings()
+    try:
+        headers = _login_as_admin(client)
+
+        create_response = client.post(
+            "/documents",
+            json={
+                "title": "Vendor Onboarding Guide",
+                "content": "Teams must verify contracts, collect tax documents, and confirm payment details.",
+                "source_type": "text",
+                "department": "finance",
+                "version": "v1",
+                "tags": ["vendor"],
+            },
+            headers=headers,
+        )
+        assert create_response.status_code == 200
+        document_id = create_response.json()["document"]["id"]
+
+        index_response = client.post("/documents/index", json={"document_id": document_id}, headers=headers)
+        assert index_response.status_code == 200
+
+        with client.stream(
+            "POST",
+            "/chat/stream",
+            json={"query": "What should we verify during vendor onboarding?"},
+            headers=headers,
+        ) as response:
+            assert response.status_code == 200
+            body = "".join(response.iter_text())
+
+        events = _parse_sse_frames(body)
+        reply = "".join(event["content"] for event in events if event["type"] == "delta")
+        done_event = next(event for event in events if event["type"] == "done")
+
+        assert any(event.get("stage") == "generation_fallback" for event in events if event["type"] == "status")
+        assert "模型服务不可用" in reply
+        assert done_event["task"]["provider"] == "mock-fallback"
+    finally:
+        _restore_model_settings(original)
 
 
 def test_async_reindex_task_flow(client: TestClient) -> None:
