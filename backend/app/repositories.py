@@ -43,7 +43,7 @@ class ConversationRepository:
                 conversation = Conversation.model_validate(record)
                 self._store[conversation.id] = conversation
 
-    def create(self, title: str = "新对话", owner_id: str = "admin") -> Conversation:
+    def create(self, title: str = "???", owner_id: str = "admin") -> Conversation:
         conversation = Conversation(title=title, owner_id=owner_id)
         self._store[conversation.id] = conversation
         self._persist()
@@ -299,14 +299,23 @@ class SessionRepository:
             for record in self.store.load():
                 session = AuthSession.model_validate(record)
                 self._store[session.token] = session
+        self.delete_expired()
 
     def save(self, session: AuthSession) -> AuthSession:
+        self.delete_expired()
         self._store[session.token] = session
         self._persist()
         return session
 
     def get(self, token: str) -> AuthSession | None:
-        return self._store.get(token)
+        session = self._store.get(token)
+        if session is None:
+            return None
+        if session.expires_at <= utc_now():
+            del self._store[token]
+            self._persist()
+            return None
+        return session
 
     def delete(self, token: str) -> bool:
         if token not in self._store:
@@ -314,6 +323,15 @@ class SessionRepository:
         del self._store[token]
         self._persist()
         return True
+
+    def delete_expired(self) -> int:
+        now = utc_now()
+        expired_tokens = [token for token, session in self._store.items() if session.expires_at <= now]
+        for token in expired_tokens:
+            del self._store[token]
+        if expired_tokens:
+            self._persist()
+        return len(expired_tokens)
 
     def _persist(self) -> None:
         if self.store:

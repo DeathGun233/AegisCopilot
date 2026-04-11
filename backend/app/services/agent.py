@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 from ..config import settings
@@ -27,6 +28,9 @@ class WorkflowContext:
     retrieval_results: list = field(default_factory=list)
     answer: str = ""
     grounded: bool = False
+    generation_provider: str = ""
+    generation_degraded: bool = False
+    generation_reason: str = ""
     trace: list[dict] = field(default_factory=list)
 
 
@@ -68,46 +72,86 @@ class AgentService:
     def run_stream(self, conversation: Conversation, query: str):
         context = WorkflowContext(conversation=conversation, query=query)
         steps = self._workflow_steps()
+        started_at = time.perf_counter()
 
+        yield self._stream_status("?????????...", stage="understand_query", started_at=started_at)
         self._understand_query(context)
+        yield self._stream_status("????????????...", stage="clarification_check", started_at=started_at)
         self._clarification_check(context)
-        yield {"type": "status", "message": "正在判断是否需要补充澄清..."}
-        self._rewrite_query(context)
-        yield {"type": "status", "message": "正在改写查询表达..."}
-        self._expand_query(context)
-        yield {"type": "status", "message": "正在扩展检索表达..."}
-        self._detect_intent(context)
-        yield {"type": "status", "message": "正在识别问题意图..."}
-        self._retrieve_context(context)
-        yield {"type": "status", "message": "正在执行混合检索..."}
-        self._plan_response(context)
-        yield {"type": "status", "message": "正在生成回答..."}
 
         if context.clarification_needed:
+            self._plan_response(context)
+            yield self._stream_status("?????????????????...", stage="clarification_response", started_at=started_at)
             context.answer = context.clarification_prompt
             yield {"type": "delta", "content": context.answer}
-        elif context.intent == Intent.chitchat:
-            context.answer = self._greeting_answer()
-            yield {"type": "delta", "content": context.answer}
         else:
-            supporting_results = self._select_supporting_results(context.retrieval_results)
-            context.retrieval_results = supporting_results
-            if supporting_results:
-                stream = self.generation.stream_generate(
-                    query=context.query,
-                    intent=context.intent.value,
-                    retrieval_results=supporting_results,
-                    conversation_summary=self._summarize_history(context.conversation),
-                )
-                context.answer = ""
-                for piece in stream:
-                    context.answer += piece
-                    yield {"type": "delta", "content": piece}
-            else:
-                context.answer = self._insufficient_evidence_answer()
-                yield {"type": "delta", "content": context.answer}
+            yield self._stream_status("????????...", stage="query_rewrite", started_at=started_at)
+            self._rewrite_query(context)
+            yield self._stream_status("????????...", stage="query_expand", started_at=started_at)
+            self._expand_query(context)
+            yield self._stream_status("????????...", stage="intent_route", started_at=started_at)
+            self._detect_intent(context)
 
-        context.trace.append({"step": WorkflowStep.tool_or_answer, "answer_preview": context.answer[:180]})
+            if context.intent == Intent.chitchat:
+                self._plan_response(context)
+                yield self._stream_status("??????????????...", stage="direct_reply", started_at=started_at)
+                context.answer = self._greeting_answer()
+                yield {"type": "delta", "content": context.answer}
+            else:
+                yield self._stream_status("????????...", stage="retrieve_context", started_at=started_at)
+                self._retrieve_context(context)
+                self._plan_response(context)
+
+                supporting_results = self._select_supporting_results(context.retrieval_results)
+                context.retrieval_results = supporting_results
+                if supporting_results:
+                    yield self._stream_status(
+                        f"???????? {len(supporting_results)} ?????????????...",
+                        stage="generate_answer",
+                        started_at=started_at,
+                        hits=len(supporting_results),
+                    )
+                    stream = self.generation.stream_generate(
+                        query=context.query,
+                        intent=context.intent.value,
+                        retrieval_results=supporting_results,
+                        conversation_summary=self._summarize_history(context.conversation),
+                    )
+                    context.answer = ""
+                    for item in stream:
+                        if item.type == "metadata":
+                            context.generation_provider = item.provider
+                            context.generation_degraded = item.degraded
+                            context.generation_reason = item.fallback_reason
+                            if item.degraded:
+                                yield self._stream_status(
+                                    "????????????????????...",
+                                    stage="generation_fallback",
+                                    started_at=started_at,
+                                    degraded=True,
+                                )
+                            continue
+                        context.answer += item.content
+                        yield {"type": "delta", "content": item.content}
+                else:
+                    yield self._stream_status(
+                        "?????????????????...",
+                        stage="insufficient_evidence",
+                        started_at=started_at,
+                        hits=0,
+                    )
+                    context.answer = self._insufficient_evidence_answer()
+                    yield {"type": "delta", "content": context.answer}
+
+        context.trace.append(
+            {
+                "step": WorkflowStep.tool_or_answer,
+                "answer_preview": context.answer[:180],
+                "generation_provider": context.generation_provider or self.generation.provider,
+                "generation_degraded": context.generation_degraded,
+                "generation_reason": context.generation_reason,
+            }
+        )
         self._grounding_check(context)
         reply = self._finalize(context)
         task = self._build_task(conversation, query, context, reply, steps)
@@ -132,7 +176,7 @@ class AgentService:
             final_answer=reply.content,
             citations=context.retrieval_results,
             route_reason=context.route_reason,
-            provider=self.generation.provider,
+            provider=context.generation_provider or self.generation.provider,
         )
 
     @staticmethod
@@ -271,16 +315,28 @@ class AgentService:
             context.answer = self._greeting_answer()
         elif context.retrieval_results:
             supporting_results = self._select_supporting_results(context.retrieval_results)
-            context.answer = self.generation.generate(
+            result = self.generation.generate(
                 query=context.query,
                 intent=context.intent.value,
                 retrieval_results=supporting_results,
                 conversation_summary=self._summarize_history(context.conversation),
             )
+            context.answer = result.content
             context.retrieval_results = supporting_results
+            context.generation_provider = result.provider
+            context.generation_degraded = result.degraded
+            context.generation_reason = result.fallback_reason
         else:
             context.answer = self._insufficient_evidence_answer()
-        context.trace.append({"step": WorkflowStep.tool_or_answer, "answer_preview": context.answer[:180]})
+        context.trace.append(
+            {
+                "step": WorkflowStep.tool_or_answer,
+                "answer_preview": context.answer[:180],
+                "generation_provider": context.generation_provider or self.generation.provider,
+                "generation_degraded": context.generation_degraded,
+                "generation_reason": context.generation_reason,
+            }
+        )
 
     def _grounding_check(self, context: WorkflowContext) -> None:
         score = context.retrieval_results[0].score if context.retrieval_results else 0.0
@@ -291,8 +347,8 @@ class AgentService:
         )
         if not context.grounded and context.intent != Intent.chitchat and not context.clarification_needed:
             context.answer = (
-                "我检索到少量相关内容，但证据还不足以支撑可靠结论。"
-                "建议进一步缩小问题范围，或者补充更多内部资料。"
+                "?????????????????????????"
+                "???????????????????????"
             )
         context.trace.append(
             {
@@ -323,8 +379,25 @@ class AgentService:
 
     @staticmethod
     def _greeting_answer() -> str:
-        return "你好，我是 AegisCopilot。你可以向我咨询企业制度、业务流程、产品文档或技术规范相关的问题。"
+        return "????? AegisCopilot?????????????????????????????????"
 
     @staticmethod
     def _insufficient_evidence_answer() -> str:
-        return "当前知识库里还没有足够证据支撑这个问题的回答。"
+        return "???????????????????????"
+
+    @staticmethod
+    def _stream_status(
+        message: str,
+        *,
+        stage: str,
+        started_at: float,
+        **extra: object,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "type": "status",
+            "message": message,
+            "stage": stage,
+            "elapsed_ms": int((time.perf_counter() - started_at) * 1000),
+        }
+        payload.update(extra)
+        return payload

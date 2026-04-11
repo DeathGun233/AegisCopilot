@@ -11,4 +11,11 @@ def sse_event(event_type: str, payload: dict) -> str:
 
 
 def stream_response(events: Generator[str, None, None]) -> StreamingResponse:
-    return StreamingResponse(events, media_type="text/event-stream")
+    return StreamingResponse(
+        events,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )

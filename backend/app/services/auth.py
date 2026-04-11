@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..config import settings
 from ..models import AuthSession, User
@@ -8,6 +8,11 @@ from ..repositories import SessionRepository, UserRepository
 
 
 class AuthService:
+    _DEFAULT_PASSWORDS = {
+        "admin": "admin123",
+        "member": "member123",
+    }
+
     def __init__(self, users: UserRepository, sessions: SessionRepository) -> None:
         self.users = users
         self.sessions = sessions
@@ -15,8 +20,15 @@ class AuthService:
     def login(self, username: str, password: str) -> tuple[User, AuthSession]:
         user = self._find_user(username)
         if user is None or not self._password_matches(user.id, password):
-            raise ValueError("用户名或密码错误")
-        session = AuthSession(user_id=user.id)
+            raise ValueError("????????")
+        self._validate_password_policy(user.id)
+        now = datetime.now(timezone.utc)
+        session = AuthSession(
+            user_id=user.id,
+            created_at=now,
+            last_seen_at=now,
+            expires_at=now + timedelta(minutes=max(settings.auth_session_ttl_minutes, 1)),
+        )
         return user, self.sessions.save(session)
 
     def get_user_by_token(self, token: str) -> User:
@@ -24,6 +36,7 @@ class AuthService:
         if session is None:
             raise KeyError(token)
         session.last_seen_at = datetime.now(timezone.utc)
+        session.expires_at = session.last_seen_at + timedelta(minutes=max(settings.auth_session_ttl_minutes, 1))
         self.sessions.save(session)
         return self.users.ensure(session.user_id)
 
@@ -44,3 +57,13 @@ class AuthService:
             "member": settings.member_password,
         }.get(user_id)
         return bool(expected) and password == expected
+
+    def _validate_password_policy(self, user_id: str) -> None:
+        if settings.allow_demo_auth:
+            return
+        configured_password = {
+            "admin": settings.admin_password,
+            "member": settings.member_password,
+        }.get(user_id, "")
+        if configured_password and configured_password == self._DEFAULT_PASSWORDS.get(user_id):
+            raise ValueError("?????????????????????????????")

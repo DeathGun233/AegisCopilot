@@ -4,6 +4,13 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 
+def _read_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _pick_api_key() -> str:
     return (
         os.getenv("AEGIS_LLM_API_KEY")
@@ -50,10 +57,20 @@ class Settings(BaseModel):
     embedding_dimensions: int = int(os.getenv("AEGIS_EMBEDDING_DIMENSIONS", "1024"))
     embedding_batch_size: int = int(os.getenv("AEGIS_EMBEDDING_BATCH_SIZE", "10"))
     environment: str = os.getenv("AEGIS_ENV", "local")
+    auth_session_ttl_minutes: int = int(os.getenv("AEGIS_AUTH_SESSION_TTL_MINUTES", "480"))
+    persist_auth_sessions: bool = _read_bool("AEGIS_PERSIST_AUTH_SESSIONS", False)
+    allow_demo_auth: bool = _read_bool(
+        "AEGIS_ALLOW_DEMO_AUTH",
+        os.getenv("AEGIS_ENV", "local").strip().lower() == "local",
+    )
     admin_password: str = os.getenv("AEGIS_ADMIN_PASSWORD", "admin123")
     member_password: str = os.getenv("AEGIS_MEMBER_PASSWORD", "member123")
 
 
+def ensure_storage_dirs() -> None:
+    settings.storage_dir.mkdir(parents=True, exist_ok=True)
+    settings.reports_dir.mkdir(parents=True, exist_ok=True)
+
+
 settings = Settings()
-settings.storage_dir.mkdir(parents=True, exist_ok=True)
-settings.reports_dir.mkdir(parents=True, exist_ok=True)
+ensure_storage_dirs()

@@ -143,7 +143,7 @@ export function AppProvider({ children }) {
             setConversations,
             setEvaluationRun,
           });
-          setAppError(error.message || "应用数据加载失败");
+          setAppError(error.message || "????????");
         }
       } finally {
         if (!cancelled) {
@@ -167,6 +167,11 @@ export function AppProvider({ children }) {
     setStoredAuthToken(data.token);
     setAuthToken(data.token);
     setCurrentUser(data.user);
+    setGlobalNotice(
+      data.demo_mode
+        ? "???????????????????????????"
+        : "?????????????????????",
+    );
     setAppError("");
     return data.user;
   }
@@ -177,7 +182,7 @@ export function AppProvider({ children }) {
         await fetchJson("/auth/logout", { method: "POST" });
       }
     } catch {
-      // 忽略退出失败，仍然清理本地登录态。
+      // ?????????????????
     } finally {
       clearStoredAuthToken();
       setAuthToken("");
@@ -194,7 +199,7 @@ export function AppProvider({ children }) {
     }
   }
 
-  async function createConversation(title = "新对话") {
+  async function createConversation(title = "???") {
     const data = await fetchJson("/conversations", {
       method: "POST",
       body: { title },

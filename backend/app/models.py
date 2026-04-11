@@ -75,7 +75,7 @@ class Message(BaseModel):
 class Conversation(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     owner_id: str = "admin"
-    title: str = "新对话"
+    title: str = "???"
     messages: list[Message] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -168,6 +168,7 @@ class AuthSession(BaseModel):
     user_id: str
     created_at: datetime = Field(default_factory=utc_now)
     last_seen_at: datetime = Field(default_factory=utc_now)
+    expires_at: datetime = Field(default_factory=utc_now)
 
 
 class AgentTask(BaseModel):

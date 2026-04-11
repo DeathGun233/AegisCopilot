@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,8 +28,8 @@ class DocumentTaskSummary(DocumentTask):
 class DocumentSummary(Document):
     chunk_count: int = 0
     indexed: bool = False
-    index_state_label: str = "待索引"
-    indexed_label: str = "未索引"
+    index_state_label: str = "???"
+    indexed_label: str = "???"
     embedded_chunk_count: int = 0
     missing_embedding_chunks: int = 0
     embedding_ready: bool = False
@@ -109,7 +110,7 @@ class ChatResponse(BaseModel):
 
 
 class ConversationCreateRequest(BaseModel):
-    title: str = "新对话"
+    title: str = "???"
 
 
 class DocumentCreateRequest(BaseModel):
@@ -202,6 +203,8 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     token: str
     user: UserSummary
+    session_expires_at: datetime
+    demo_mode: bool = False
 
 
 class LogoutResponse(BaseModel):

@@ -6,27 +6,27 @@ import { useAppContext } from "../context/AppContext";
 import { fetchJson, streamChat } from "../lib/api";
 
 const starterPrompts = [
-  "员工请假流程是什么？",
-  "生产发布前需要检查什么？",
-  "请总结差旅报销流程。",
-  "跨境电商公司在个人信息保护方面要注意什么？",
+  "??????????",
+  "????????????",
+  "??????????",
+  "?????????????????????",
 ];
 
 const scenarioCards = [
   {
-    title: "制度问答",
-    description: "围绕企业制度、流程和规范发起基于知识库的提问。",
-    prompt: "员工请假流程是什么？",
+    title: "????",
+    description: "???????????????????????",
+    prompt: "??????????",
   },
   {
-    title: "流程总结",
-    description: "把分散证据整理成更结构化的操作结论。",
-    prompt: "请总结差旅报销流程。",
+    title: "????",
+    description: "??????????????????",
+    prompt: "??????????",
   },
   {
-    title: "发布检查",
-    description: "把发布类问题转成上线前可执行的检查清单。",
-    prompt: "生产发布前需要检查什么？",
+    title: "????",
+    description: "????????????????????",
+    prompt: "????????????",
   },
 ];
 
@@ -38,6 +38,8 @@ export function ChatPage() {
   const [query, setQuery] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamStatus, setStreamStatus] = useState("");
+  const [streamMeta, setStreamMeta] = useState({ elapsedMs: 0, hits: null });
+  const [streamWaitSeconds, setStreamWaitSeconds] = useState(0);
   const [citationMap, setCitationMap] = useState({});
   const threadEndRef = useRef(null);
 
@@ -51,12 +53,14 @@ export function ChatPage() {
       setMessages(currentConversation.messages || []);
       setCitationMap({});
       setStreamStatus("");
+      setStreamMeta({ elapsedMs: 0, hits: null });
       return;
     }
     if (!conversationId) {
       setMessages([]);
       setCitationMap({});
       setStreamStatus("");
+      setStreamMeta({ elapsedMs: 0, hits: null });
       return;
     }
 
@@ -79,6 +83,37 @@ export function ChatPage() {
     return () => window.cancelAnimationFrame(frame);
   }, [messages, isStreaming, streamStatus]);
 
+  useEffect(() => {
+    if (!isStreaming) {
+      setStreamWaitSeconds(0);
+      return undefined;
+    }
+
+    const startedAt = window.Date.now();
+    setStreamWaitSeconds(0);
+    const timer = window.setInterval(() => {
+      setStreamWaitSeconds(Math.floor((window.Date.now() - startedAt) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isStreaming]);
+
+  const streamStatusLabel = useMemo(() => {
+    if (!streamStatus) {
+      return "";
+    }
+
+    const details = [streamStatus];
+    const elapsedSeconds = Math.max(streamWaitSeconds, Math.floor((streamMeta.elapsedMs || 0) / 1000));
+    if (isStreaming && elapsedSeconds > 0) {
+      details.push(`??? ${elapsedSeconds} ?`);
+    }
+    if (typeof streamMeta.hits === "number" && streamMeta.hits > 0) {
+      details.push(`?? ${streamMeta.hits} ?`);
+    }
+    return details.join(" ? ");
+  }, [isStreaming, streamMeta.elapsedMs, streamMeta.hits, streamStatus, streamWaitSeconds]);
+
   async function handleSendMessage(event) {
     event.preventDefault();
     const trimmed = query.trim();
@@ -93,7 +128,8 @@ export function ChatPage() {
       { id: assistantId, role: "assistant", content: "" },
     ]);
     setIsStreaming(true);
-    setStreamStatus("正在连接模型...");
+    setStreamStatus("????????...");
+    setStreamMeta({ elapsedMs: 0, hits: null });
     setQuery("");
     setCitationMap((current) => ({ ...current, [assistantId]: [] }));
 
@@ -109,6 +145,10 @@ export function ChatPage() {
           },
           onStatus(payload) {
             setStreamStatus(payload.message);
+            setStreamMeta({
+              elapsedMs: payload.elapsed_ms ?? 0,
+              hits: typeof payload.hits === "number" ? payload.hits : null,
+            });
           },
           onDelta(payload) {
             answer += payload.content;
@@ -139,10 +179,11 @@ export function ChatPage() {
     } catch (error) {
       setMessages((current) =>
         current.map((message) =>
-          message.id === assistantId ? { ...message, content: "模型请求失败，请稍后重试。" } : message,
+          message.id === assistantId ? { ...message, content: "?????????????" } : message,
         ),
       );
-      setStreamStatus(error.message || "模型请求失败");
+      setStreamStatus(error.message || "??????");
+      setStreamMeta({ elapsedMs: 0, hits: null });
     } finally {
       setIsStreaming(false);
     }
@@ -152,8 +193,8 @@ export function ChatPage() {
     <div className="page chat-page">
       <header className="page-header">
         <div>
-          <span className="page-kicker">AegisCopilot / 对话</span>
-          <h1>{currentConversation?.title || "新对话"}</h1>
+          <span className="page-kicker">AegisCopilot / ??</span>
+          <h1>{currentConversation?.title || "???"}</h1>
         </div>
       </header>
 
@@ -161,11 +202,11 @@ export function ChatPage() {
         <section className="thread-panel thread-panel--chat">
           <div className="panel-head chat-thread-head">
             <div>
-              <span className="panel-kicker">当前会话</span>
-              <h3>{currentConversation?.title || "新对话"}</h3>
+              <span className="panel-kicker">????</span>
+              <h3>{currentConversation?.title || "???"}</h3>
             </div>
             <span className={isStreaming ? "status-dot live" : "status-dot"}>
-              {isStreaming ? "正在流式回答" : messages.length ? `${messages.length} 条消息` : "等待你的第一个问题"}
+              {isStreaming ? "??????" : messages.length ? `${messages.length} ???` : "?????????"}
             </span>
           </div>
 
@@ -175,9 +216,9 @@ export function ChatPage() {
             ) : (
               <div className="chat-empty-state">
                 <div className="chat-empty-hero">
-                  <span className="hero-pill">RAG 智能问答</span>
-                  <h2>把问题变成有依据的答案</h2>
-                  <p>通过结构化提问、知识检索与流式生成，服务真实业务场景下的企业知识问答。</p>
+                  <span className="hero-pill">RAG ????</span>
+                  <h2>???????????</h2>
+                  <p>???????????????????????????????????</p>
                 </div>
 
                 <div className="chat-empty-grid">
@@ -207,7 +248,7 @@ export function ChatPage() {
             onQueryChange={setQuery}
             onSubmit={handleSendMessage}
             isStreaming={isStreaming}
-            streamStatus={streamStatus}
+            streamStatus={streamStatusLabel}
             starterPrompts={starterPrompts}
             rows={3}
           />

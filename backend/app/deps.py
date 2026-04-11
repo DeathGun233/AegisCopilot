@@ -41,7 +41,8 @@ class Container:
         )
         self.document_tasks = DocumentTaskRepository(JsonStore(storage / "document_tasks.json"))
         self.users = UserRepository(JsonStore(storage / "users.json"))
-        self.sessions = SessionRepository(JsonStore(storage / "sessions.json"))
+        session_store = JsonStore(storage / "sessions.json") if settings.persist_auth_sessions else None
+        self.sessions = SessionRepository(session_store)
         self.tasks = TaskRepository(JsonStore(storage / "tasks.json"))
         self.runtime_retrieval_service = RuntimeRetrievalService(storage / "runtime_retrieval.json")
         self.embedding_service = EmbeddingService()
@@ -80,16 +81,20 @@ def get_container() -> Container:
     return Container()
 
 
+def reset_container() -> None:
+    get_container.cache_clear()
+
+
 def get_current_user(
     authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> User:
     if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="????")
     token = authorization.split(" ", 1)[1].strip()
     if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="????")
     container = get_container()
     try:
         return container.auth_service.get_user_by_token(token)
     except KeyError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录态已失效，请重新登录") from exc
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="????????????") from exc
