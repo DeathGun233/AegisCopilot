@@ -254,7 +254,7 @@ def test_chat_surfaces_model_fallback(client: TestClient) -> None:
         payload = chat_response.json()
 
         assert payload["task"]["provider"] == "mock-fallback"
-        assert "???????" in payload["reply"]["content"]
+        assert "模型服务不可用" in payload["reply"]["content"]
         assert any(item.get("generation_degraded") is True for item in payload["task"]["trace"])
     finally:
         _restore_model_settings(original)
@@ -297,7 +297,7 @@ def test_stream_chat_surfaces_model_fallback(client: TestClient) -> None:
         done_event = next(event for event in events if event["type"] == "done")
 
         assert any(event.get("stage") == "generation_fallback" for event in events if event["type"] == "status")
-        assert "???????" in reply
+        assert "模型服务不可用" in reply
         assert done_event["task"]["provider"] == "mock-fallback"
     finally:
         _restore_model_settings(original)
