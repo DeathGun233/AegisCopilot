@@ -175,6 +175,10 @@ class SqlConversationRepository:
 
     def create(self, title: str = "新对话", owner_id: str = "admin") -> Conversation:
         conversation = Conversation(title=title, owner_id=owner_id)
+        self.save(conversation)
+        return conversation
+
+    def save(self, conversation: Conversation) -> Conversation:
         self._save(conversation)
         return conversation
 
@@ -455,7 +459,7 @@ class SqlUserRepository:
             User(id="admin", name="admin", role=UserRole.admin),
             User(id="member", name="member", role=UserRole.member),
         ):
-            self._save(user)
+            self.save(user)
 
     def get(self, user_id: str) -> User | None:
         row = self.db.execute(
@@ -478,6 +482,10 @@ class SqlUserRepository:
         user = self.get(user_id)
         if user is None:
             raise KeyError(user_id)
+        return user
+
+    def save(self, user: User) -> User:
+        self._save(user)
         return user
 
     def _save(self, user: User) -> None:
