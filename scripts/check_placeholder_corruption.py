@@ -14,6 +14,7 @@ DEFAULT_TARGETS = (
 )
 TEXT_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx", ".json", ".md", ".css", ".html"}
 PLACEHOLDER_PATTERN = re.compile(r"\?{3,}")
+REPLACEMENT_CHARACTER = "\ufffd"
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,22 @@ class Finding:
     path: Path
     line_number: int
     line: str
+
+
+def _contains_cjk(text: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in text)
+
+
+def _looks_like_gbk_decoded_utf8(line: str) -> bool:
+    if not any(ord(char) > 127 for char in line):
+        return False
+
+    try:
+        repaired = line.encode("gbk").decode("utf-8")
+    except UnicodeError:
+        return False
+
+    return repaired != line and _contains_cjk(repaired)
 
 
 def _iter_files(paths: Sequence[Path]) -> Iterable[Path]:
@@ -42,7 +59,11 @@ def scan_paths(paths: Sequence[Path]) -> list[Finding]:
         except UnicodeDecodeError:
             continue
         for line_number, line in enumerate(content.splitlines(), start=1):
-            if PLACEHOLDER_PATTERN.search(line):
+            if (
+                PLACEHOLDER_PATTERN.search(line)
+                or REPLACEMENT_CHARACTER in line
+                or _looks_like_gbk_decoded_utf8(line)
+            ):
                 findings.append(Finding(path=path, line_number=line_number, line=line.strip()))
     return findings
 
