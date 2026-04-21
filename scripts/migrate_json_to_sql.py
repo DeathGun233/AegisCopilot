@@ -67,6 +67,21 @@ def _load_records(path: Path, model_type) -> list:
     return [model_type.model_validate(item) for item in payload]
 
 
+def _load_sessions(path: Path) -> list[AuthSession]:
+    payload = _read_json(path)
+    if not isinstance(payload, list):
+        return []
+    now = datetime.now(timezone.utc)
+    sessions: list[AuthSession] = []
+    for item in payload:
+        if not isinstance(item, dict) or not item.get("expires_at"):
+            continue
+        session = AuthSession.model_validate(item)
+        if session.expires_at > now:
+            sessions.append(session)
+    return sessions
+
+
 def _load_payload(storage_dir: Path) -> MigrationPayload:
     runtime_model = _read_json(storage_dir / "runtime_model.json")
     runtime_retrieval = _read_json(storage_dir / "runtime_retrieval.json")
@@ -77,7 +92,7 @@ def _load_payload(storage_dir: Path) -> MigrationPayload:
         document_tasks=_load_records(storage_dir / "document_tasks.json", DocumentTask),
         tasks=_load_records(storage_dir / "tasks.json", AgentTask),
         users=_load_records(storage_dir / "users.json", User),
-        sessions=_load_records(storage_dir / "sessions.json", AuthSession),
+        sessions=_load_sessions(storage_dir / "sessions.json"),
         runtime_model=runtime_model if isinstance(runtime_model, dict) and runtime_model else None,
         runtime_retrieval=runtime_retrieval if isinstance(runtime_retrieval, dict) and runtime_retrieval else None,
     )

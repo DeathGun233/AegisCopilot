@@ -202,6 +202,70 @@ def test_migration_writes_report_and_rollback_sql(tmp_path: Path) -> None:
     assert "DELETE FROM runtime_settings WHERE key IN ('runtime_model');" in rollback_sql
 
 
+def test_migration_skips_legacy_or_expired_sessions_in_report_and_database(tmp_path: Path) -> None:
+    module = _load_module()
+    from app.models import AuthSession, utc_now
+    from app.sql_repositories import SqlDatabase, SqlSessionRepository
+
+    storage_dir = tmp_path / "storage"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    now = utc_now()
+    valid_session = AuthSession(
+        token="session-valid",
+        user_id="admin",
+        created_at=now,
+        last_seen_at=now,
+        expires_at=now + timedelta(hours=4),
+    )
+    expired_session = AuthSession(
+        token="session-expired",
+        user_id="admin",
+        created_at=now - timedelta(days=2),
+        last_seen_at=now - timedelta(days=2),
+        expires_at=now - timedelta(days=1),
+    )
+    legacy_session = {
+        "token": "session-legacy",
+        "user_id": "admin",
+        "created_at": now.isoformat(),
+        "last_seen_at": now.isoformat(),
+    }
+    (storage_dir / "sessions.json").write_text(
+        json.dumps(
+            [
+                valid_session.model_dump(mode="json"),
+                expired_session.model_dump(mode="json"),
+                legacy_session,
+            ],
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    database_url = f"sqlite:///{(tmp_path / 'sessions.db').as_posix()}"
+    report_path = tmp_path / "migration-report.json"
+
+    assert module.main(
+        [
+            "--storage-dir",
+            str(storage_dir),
+            "--database-url",
+            database_url,
+            "--report-path",
+            str(report_path),
+        ]
+    ) == 0
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    sessions = SqlSessionRepository(SqlDatabase(database_url))
+
+    assert report["counts"]["sessions"] == 1
+    assert sessions.get(valid_session.token) is not None
+    assert sessions.get(expired_session.token) is None
+    assert sessions.get("session-legacy") is None
+
+
 def test_alembic_initial_migration_covers_sql_persistence_tables() -> None:
     migration_path = ROOT / "backend" / "alembic" / "versions" / "0001_initial_sql_persistence.py"
     content = migration_path.read_text(encoding="utf-8")
