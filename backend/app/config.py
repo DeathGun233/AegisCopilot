@@ -57,6 +57,10 @@ class Settings(BaseModel):
     embedding_api_key: str = _pick_embedding_api_key()
     embedding_dimensions: int = int(os.getenv("AEGIS_EMBEDDING_DIMENSIONS", "1024"))
     embedding_batch_size: int = int(os.getenv("AEGIS_EMBEDDING_BATCH_SIZE", "10"))
+    vector_store_provider: str = os.getenv("AEGIS_VECTOR_STORE_PROVIDER", "local").strip().lower() or "local"
+    milvus_uri: str = os.getenv("AEGIS_MILVUS_URI", "http://localhost:19530")
+    milvus_token: str = os.getenv("AEGIS_MILVUS_TOKEN", "")
+    milvus_collection: str = os.getenv("AEGIS_MILVUS_COLLECTION", "aegis_chunks")
     environment: str = os.getenv("AEGIS_ENV", "local")
     auth_session_ttl_minutes: int = int(os.getenv("AEGIS_AUTH_SESSION_TTL_MINUTES", "480"))
     persist_auth_sessions: bool = _read_bool("AEGIS_PERSIST_AUTH_SESSIONS", False)

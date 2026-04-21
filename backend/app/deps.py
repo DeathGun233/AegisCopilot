@@ -7,7 +7,7 @@ from fastapi import Header, HTTPException, status
 
 from .config import settings
 from .models import User
-from .vector_store import LocalVectorStore
+from .vector_store import LocalVectorStore, MilvusVectorStore, VectorStore
 from .repositories import (
     ConversationRepository,
     DocumentRepository,
@@ -79,7 +79,7 @@ class Container:
             self.tasks = TaskRepository(JsonStore(storage / "tasks.json"))
             self.runtime_retrieval_service = RuntimeRetrievalService(storage / "runtime_retrieval.json")
             self.runtime_model_service = RuntimeModelService(storage / "runtime_model.json")
-        self.vector_store = LocalVectorStore(self.documents)
+        self.vector_store = self._build_vector_store()
         self.embedding_service = EmbeddingService()
         self.document_service = DocumentService(
             self.documents,
@@ -114,6 +114,22 @@ class Container:
             self.runtime_model_service,
             self.runtime_retrieval_service,
             self.embedding_service,
+        )
+
+    def _build_vector_store(self) -> VectorStore:
+        provider = settings.vector_store_provider.strip().lower()
+        if provider == "local":
+            return LocalVectorStore(self.documents)
+        if provider == "milvus":
+            return MilvusVectorStore(
+                uri=settings.milvus_uri,
+                token=settings.milvus_token,
+                collection=settings.milvus_collection,
+                dimension=settings.embedding_dimensions,
+            )
+        raise ValueError(
+            "Unsupported AEGIS_VECTOR_STORE_PROVIDER "
+            f"{settings.vector_store_provider!r}; expected 'local' or 'milvus'."
         )
 
 
