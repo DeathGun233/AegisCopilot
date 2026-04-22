@@ -313,6 +313,14 @@ export function AppProvider({ children }) {
     });
   }
 
+  async function debugRetrieval(payload) {
+    const data = await fetchJson("/retrieval/debug", {
+      method: "POST",
+      body: payload,
+    });
+    return data.debug;
+  }
+
   async function selectModel(modelId) {
     const data = await fetchJson("/models/select", {
       method: "POST",
@@ -344,6 +352,7 @@ export function AppProvider({ children }) {
         currentUser,
         deleteConversation,
         deleteDocument,
+        debugRetrieval,
         documents,
         evaluationRun,
         fetchDocument,

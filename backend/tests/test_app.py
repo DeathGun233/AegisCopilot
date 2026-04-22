@@ -165,6 +165,71 @@ def test_system_status_requires_admin(client: TestClient) -> None:
     assert response.status_code == 403
 
 
+def test_retrieval_debug_requires_admin(client: TestClient) -> None:
+    headers = _login_as_member(client)
+
+    response = client.post("/retrieval/debug", json={"query": "leave approval"}, headers=headers)
+
+    assert response.status_code == 403
+
+
+def test_retrieval_debug_uses_trial_settings_without_persisting(client: TestClient) -> None:
+    headers = _login_as_admin(client)
+
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Leave Approval Policy",
+            "content": (
+                "Employees submit leave requests one business day in advance. "
+                "Managers approve annual leave before the leave starts."
+            ),
+            "source_type": "text",
+            "department": "hr",
+            "version": "v1",
+            "tags": ["leave"],
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 200
+    document_id = create_response.json()["document"]["id"]
+    assert client.post("/documents/index", json={"document_id": document_id}, headers=headers).status_code == 200
+
+    original_settings = client.get("/retrieval/settings", headers=headers).json()["settings"]
+    response = client.post(
+        "/retrieval/debug",
+        json={
+            "query": "leave approval",
+            "top_k": 1,
+            "candidate_k": 3,
+            "keyword_weight": 1.0,
+            "semantic_weight": 0.0,
+            "rerank_weight": 0.2,
+            "min_score": 0.01,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    debug = response.json()["debug"]
+    assert debug["settings"]["top_k"] == 1
+    assert debug["settings"]["candidate_k"] == 3
+    assert debug["query_variants"]
+    assert debug["results"]
+    assert debug["candidates"][0]["filter_reason"] in {
+        "selected",
+        "outside_top_k",
+        "duplicate",
+        "below_min_score",
+    }
+    assert "keyword_score" in debug["candidates"][0]
+    assert "semantic_score" in debug["candidates"][0]
+    assert "rerank_score" in debug["candidates"][0]
+
+    persisted_settings = client.get("/retrieval/settings", headers=headers).json()["settings"]
+    assert persisted_settings == original_settings
+
+
 def test_document_and_chat_flow(client: TestClient) -> None:
     headers = _login_as_admin(client)
 

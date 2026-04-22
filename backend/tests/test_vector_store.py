@@ -65,6 +65,103 @@ def test_retrieval_reads_candidates_from_vector_store(tmp_path: Path) -> None:
     assert vector_store.calls[0]["query"] == "leave requests"
 
 
+def test_retrieval_debug_reports_scores_variants_and_filter_reasons(tmp_path: Path) -> None:
+    from app.services.retrieval import RetrievalService
+
+    chunks = [
+        Chunk(
+            id="chunk-debug-primary",
+            document_id="doc-debug",
+            document_title="Leave Policy",
+            text="Leave approval requires manager approval before annual leave starts.",
+            chunk_index=0,
+            tokens=["leave", "approval", "requires", "manager", "approval", "annual", "leave"],
+            embedding=[],
+            embedding_version="",
+            metadata={},
+        ),
+        Chunk(
+            id="chunk-debug-secondary",
+            document_id="doc-debug",
+            document_title="Leave Policy",
+            text="Employees submit leave requests one business day in advance.",
+            chunk_index=1,
+            tokens=["employees", "submit", "leave", "requests", "business", "day", "advance"],
+            embedding=[],
+            embedding_version="",
+            metadata={},
+        ),
+        Chunk(
+            id="chunk-debug-duplicate",
+            document_id="doc-debug",
+            document_title="Leave Policy",
+            text="Leave approval requires manager approval before annual leave starts.",
+            chunk_index=2,
+            tokens=["leave", "approval", "requires", "manager", "approval", "annual", "leave"],
+            embedding=[],
+            embedding_version="",
+            metadata={},
+        ),
+        Chunk(
+            id="chunk-debug-low",
+            document_id="doc-security",
+            document_title="Badge Policy",
+            text="Security badges must be visible in the office lobby.",
+            chunk_index=0,
+            tokens=["security", "badges", "visible", "office", "lobby"],
+            embedding=[],
+            embedding_version="",
+            metadata={},
+        ),
+    ]
+    service = RetrievalService(
+        repo=RejectingDocumentRepository(),
+        vector_store=StaticVectorStore(chunks),
+        runtime_retrieval=RuntimeRetrievalService(tmp_path / "runtime_retrieval.json"),
+        embeddings=DisabledEmbeddings(),
+    )
+
+    debug = service.debug_search(
+        "leave approval",
+        query_variants=["leave request approval", "leave approval"],
+        top_k=1,
+        candidate_k=4,
+        keyword_weight=1.0,
+        semantic_weight=0.0,
+        rerank_weight=0.5,
+        min_score=0.2,
+    )
+
+    assert [item["label"] for item in debug["query_variants"]] == ["primary", "expand_1"]
+    assert debug["settings"]["top_k"] == 1
+    assert debug["settings"]["candidate_k"] == 4
+    assert [item["chunk_id"] for item in debug["results"]] == ["chunk-debug-primary"]
+    assert any(item["filter_reason"] == "selected" for item in debug["candidates"])
+    assert any(item["filter_reason"] == "duplicate" for item in debug["candidates"])
+    assert any(item["filter_reason"] == "below_min_score" for item in debug["candidates"])
+    assert all(
+        {"keyword_score", "semantic_score", "rerank_score", "matched_query", "query_variant"} <= set(item)
+        for item in debug["candidates"]
+    )
+
+
+def test_retrieval_debug_handles_empty_query(tmp_path: Path) -> None:
+    from app.services.retrieval import RetrievalService
+
+    service = RetrievalService(
+        repo=RejectingDocumentRepository(),
+        vector_store=StaticVectorStore([]),
+        runtime_retrieval=RuntimeRetrievalService(tmp_path / "runtime_retrieval.json"),
+        embeddings=DisabledEmbeddings(),
+    )
+
+    debug = service.debug_search("   ")
+
+    assert debug["query_variants"] == []
+    assert debug["candidates"] == []
+    assert debug["results"] == []
+
+
 def test_local_vector_store_delegates_to_existing_chunk_storage() -> None:
     from app.vector_store import LocalVectorStore
 
