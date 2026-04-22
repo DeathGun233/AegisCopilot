@@ -25,6 +25,9 @@ def client(tmp_path: Path):
         "embedding_base_url": settings.embedding_base_url,
         "embedding_api_key": settings.embedding_api_key,
         "database_url": settings.database_url,
+        "vector_store_provider": settings.vector_store_provider,
+        "milvus_uri": settings.milvus_uri,
+        "milvus_collection": settings.milvus_collection,
     }
 
     settings.storage_dir = tmp_path / "storage"
@@ -36,6 +39,9 @@ def client(tmp_path: Path):
     settings.embedding_base_url = ""
     settings.embedding_api_key = ""
     settings.database_url = ""
+    settings.vector_store_provider = "local"
+    settings.milvus_uri = "http://localhost:19530"
+    settings.milvus_collection = "aegis_chunks"
     ensure_storage_dirs()
     reset_container()
 
@@ -149,6 +155,9 @@ def test_system_status_reports_readiness_and_providers(client: TestClient) -> No
     assert payload["providers"]["database"]["status"] == "ok"
     assert payload["providers"]["vector"]["provider"] == "local"
     assert payload["providers"]["vector"]["status"] == "ok"
+    assert payload["providers"]["vector"]["detail"]["selection_mode"] == "startup"
+    assert payload["providers"]["vector"]["detail"]["restart_required_for_changes"] is True
+    assert payload["providers"]["vector"]["detail"]["available_providers"] == ["local", "milvus"]
     assert payload["providers"]["embedding"]["provider"] == "disabled"
     assert payload["providers"]["llm"]["provider"] == "mock"
     assert payload["document_tasks"]["queued"] == 0

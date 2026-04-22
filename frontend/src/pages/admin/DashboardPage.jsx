@@ -277,6 +277,52 @@ export function DashboardPage() {
         <article className="panel-card">
           <div className="panel-head">
             <div>
+              <span className="panel-kicker">向量数据库</span>
+              <h3>Milvus 接入</h3>
+            </div>
+            <span className={`status-pill ${systemStatus?.providers?.vector?.provider === "milvus" ? "live" : ""}`}>
+              {systemStatus?.providers?.vector?.provider === "milvus" ? "Milvus" : "Local"}
+            </span>
+          </div>
+          <div className="definition-list compact">
+            <div>
+              <span>当前 provider</span>
+              <strong>{systemStatus?.providers?.vector?.provider || "-"}</strong>
+            </div>
+            <div>
+              <span>可选 provider</span>
+              <strong>{systemStatus?.providers?.vector?.detail?.available_providers?.join(" / ") || "local / milvus"}</strong>
+            </div>
+            <div>
+              <span>选择方式</span>
+              <strong>
+                {systemStatus?.providers?.vector?.detail?.selection_mode === "startup"
+                  ? "启动环境变量"
+                  : systemStatus?.providers?.vector?.detail?.selection_mode || "-"}
+              </strong>
+            </div>
+            <div>
+              <span>Milvus URI</span>
+              <strong>{systemStatus?.providers?.vector?.detail?.uri || "未启用 Milvus"}</strong>
+            </div>
+            <div>
+              <span>Collection</span>
+              <strong>{systemStatus?.providers?.vector?.detail?.collection || "-"}</strong>
+            </div>
+          </div>
+          {systemStatus?.providers?.vector?.provider !== "milvus" ? (
+            <div className="global-notice">
+              要启用 Milvus，请设置 `AEGIS_VECTOR_STORE_PROVIDER=milvus` 并重启后端；Docker Compose 默认会启动
+              Milvus、etcd 和 MinIO。
+            </div>
+          ) : (
+            <div className="global-notice">当前后端已经使用 Milvus 作为向量数据库。</div>
+          )}
+        </article>
+
+        <article className="panel-card">
+          <div className="panel-head">
+            <div>
               <span className="panel-kicker">任务队列</span>
               <h3>索引任务</h3>
             </div>
