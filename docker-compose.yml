@@ -18,7 +18,17 @@ services:
       AEGIS_DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/aegiscopilot
       AEGIS_VECTOR_STORE_PROVIDER: ${AEGIS_VECTOR_STORE_PROVIDER:-milvus}
       AEGIS_MILVUS_URI: ${AEGIS_MILVUS_URI:-http://milvus:19530}
+      AEGIS_MILVUS_TOKEN: ${AEGIS_MILVUS_TOKEN:-}
       AEGIS_MILVUS_COLLECTION: ${AEGIS_MILVUS_COLLECTION:-aegis_chunks}
+      AEGIS_LLM_PROVIDER: ${AEGIS_LLM_PROVIDER:-mock}
+      AEGIS_LLM_MODEL: ${AEGIS_LLM_MODEL:-qwen3-max}
+      AEGIS_LLM_BASE_URL: ${AEGIS_LLM_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      AEGIS_LLM_API_KEY: ${AEGIS_LLM_API_KEY:-${OPEN_AI_KEY:-${OPENAI_API_KEY:-}}}
+      AEGIS_EMBEDDING_PROVIDER: ${AEGIS_EMBEDDING_PROVIDER:-openai-compatible}
+      AEGIS_EMBEDDING_MODEL: ${AEGIS_EMBEDDING_MODEL:-text-embedding-v4}
+      AEGIS_EMBEDDING_BASE_URL: ${AEGIS_EMBEDDING_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      AEGIS_EMBEDDING_API_KEY: ${AEGIS_EMBEDDING_API_KEY:-${AEGIS_LLM_API_KEY:-${OPEN_AI_KEY:-${OPENAI_API_KEY:-}}}}
+      AEGIS_EMBEDDING_DIMENSIONS: ${AEGIS_EMBEDDING_DIMENSIONS:-1024}
     ports:
       - "8000:8000"
     depends_on:
@@ -28,6 +38,8 @@ services:
   frontend:
     build:
       context: ./frontend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://127.0.0.1:8000}
     ports:
       - "5173:5173"
     depends_on:

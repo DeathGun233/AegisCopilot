@@ -20,6 +20,9 @@ def test_compose_defaults_backend_to_milvus() -> None:
     assert "milvus-etcd:" in compose
     assert "milvus-minio:" in compose
     assert "profiles:" not in compose
+    assert "AEGIS_EMBEDDING_API_KEY:" in compose
+    assert "AEGIS_EMBEDDING_PROVIDER:" in compose
+    assert "VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://127.0.0.1:8000}" in compose
 
 
 def test_env_example_advertises_milvus_provider() -> None:

@@ -239,6 +239,26 @@ def test_retrieval_debug_uses_trial_settings_without_persisting(client: TestClie
     assert persisted_settings == original_settings
 
 
+def test_index_document_surfaces_vector_store_configuration_errors(client: TestClient) -> None:
+    from app.deps import get_container
+
+    headers = _login_as_admin(client)
+    container = get_container()
+    original_index_document = container.document_service.index_document
+
+    def fail_index(document_id: str) -> int:
+        raise ValueError("MilvusVectorStore requires chunk embeddings.")
+
+    container.document_service.index_document = fail_index
+    try:
+        response = client.post("/documents/index", json={"document_id": "doc-needs-embedding"}, headers=headers)
+    finally:
+        container.document_service.index_document = original_index_document
+
+    assert response.status_code == 400
+    assert "MilvusVectorStore requires chunk embeddings" in response.json()["detail"]
+
+
 def test_document_and_chat_flow(client: TestClient) -> None:
     headers = _login_as_admin(client)
 
