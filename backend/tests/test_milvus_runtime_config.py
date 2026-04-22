@@ -22,6 +22,7 @@ def test_compose_defaults_backend_to_milvus() -> None:
     assert "profiles:" not in compose
     assert "AEGIS_EMBEDDING_API_KEY:" in compose
     assert "AEGIS_EMBEDDING_PROVIDER:" in compose
+    assert "AEGIS_LLM_PROVIDER: ${AEGIS_LLM_PROVIDER:-openai-compatible}" in compose
     assert "VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://127.0.0.1:8000}" in compose
 
 

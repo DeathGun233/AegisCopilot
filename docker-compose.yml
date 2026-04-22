@@ -20,7 +20,7 @@ services:
       AEGIS_MILVUS_URI: ${AEGIS_MILVUS_URI:-http://milvus:19530}
       AEGIS_MILVUS_TOKEN: ${AEGIS_MILVUS_TOKEN:-}
       AEGIS_MILVUS_COLLECTION: ${AEGIS_MILVUS_COLLECTION:-aegis_chunks}
-      AEGIS_LLM_PROVIDER: ${AEGIS_LLM_PROVIDER:-mock}
+      AEGIS_LLM_PROVIDER: ${AEGIS_LLM_PROVIDER:-openai-compatible}
       AEGIS_LLM_MODEL: ${AEGIS_LLM_MODEL:-qwen3-max}
       AEGIS_LLM_BASE_URL: ${AEGIS_LLM_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
       AEGIS_LLM_API_KEY: ${AEGIS_LLM_API_KEY:-${OPEN_AI_KEY:-${OPENAI_API_KEY:-}}}
