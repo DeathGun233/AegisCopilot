@@ -148,6 +148,7 @@ def _match_section_heading(line: str) -> tuple[int, str, str] | None:
 
     patterns: list[tuple[int, str]] = [
         (1, rf"^(?P<marker>[{CHINESE_NUMERAL}]+[、.．])\s*(?P<title>.+)$"),
+        (1, rf"^(?P<marker>第[0-9{CHINESE_NUMERAL}]+条)\s*(?P<title>.+)$"),
         (2, rf"^(?P<marker>[（(][{CHINESE_NUMERAL}]+[）)])\s*(?P<title>.+)$"),
         (3, r"^(?P<marker>\d+[.．、])\s*(?P<title>.+)$"),
         (4, r"^(?P<marker>[（(]\d+[）)])\s*(?P<title>.+)$"),
@@ -159,7 +160,10 @@ def _match_section_heading(line: str) -> tuple[int, str, str] | None:
         title = matched.group("title").strip()
         if not title:
             return None
-        return level, matched.group("marker"), title
+        marker = matched.group("marker")
+        if marker.startswith("第") and marker.endswith("条"):
+            return level, "", f"{marker} {title}"
+        return level, marker, title
     return None
 
 

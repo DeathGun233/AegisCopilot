@@ -66,3 +66,28 @@ def test_structured_chunks_group_admission_condition_sections() -> None:
     assert isinstance(basic.metadata["section_index"], int)
     assert "中华人民共和国公民" in basic.text
     assert "国家承认学历的应届本科毕业生" in basic.text
+
+
+def test_structured_chunks_keep_legal_article_items_under_article_parent() -> None:
+    text = """
+第二十一条 国家实行网络安全等级保护制度。网络运营者应当按照网络安全等级保护制度的要求，履行下列安全保护义务：
+（一）制定内部安全管理制度和操作规程，确定网络安全负责人，落实网络安全保护责任；
+（二）采取防范计算机病毒和网络攻击、网络侵入等危害网络安全行为的技术措施；
+（三）采取监测、记录网络运行状态、网络安全事件的技术措施，并按照规定留存相关的网络日志不少于六个月；
+（四）采取数据分类、重要数据备份和加密等措施；
+（五）法律、行政法规规定的其他义务。
+第二十二条 网络产品、服务应当符合相关国家标准的强制性要求。
+"""
+
+    chunks = split_into_structured_chunks(text, chunk_size=500)
+    section_paths = [chunk.metadata["section_path"] for chunk in chunks]
+
+    assert "第二十一条 国家实行网络安全等级保护制度。网络运营者应当按照网络安全等级保护制度的要求，履行下列安全保护义务：" in section_paths
+    assert (
+        "第二十一条 国家实行网络安全等级保护制度。网络运营者应当按照网络安全等级保护制度的要求，履行下列安全保护义务："
+        " > 制定内部安全管理制度和操作规程，确定网络安全负责人，落实网络安全保护责任；"
+    ) in section_paths
+    assert (
+        "第二十一条 国家实行网络安全等级保护制度。网络运营者应当按照网络安全等级保护制度的要求，履行下列安全保护义务："
+        " > 采取数据分类、重要数据备份和加密等措施；"
+    ) in section_paths
