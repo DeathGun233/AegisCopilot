@@ -4,8 +4,10 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass
+from typing import Any
 
-from ..models import RetrievalResult
+from ..config import settings
+from ..models import RetrievalResult, RetrievalSettings
 from ..repositories import DocumentRepository
 from ..vector_store import VectorStore
 from .embeddings import EmbeddingService
@@ -67,9 +69,130 @@ class RetrievalService:
             key=lambda item: (item.score, item.keyword_score, item.semantic_score, item.coverage_score),
             reverse=True,
         )
-        return deduped[:final_top_k]
+        expanded = self._expand_context_results(deduped, final_top_k)
+        return expanded[:final_top_k]
 
     def _search_single_query(self, query: str, settings, limit: int) -> list[RetrievalResult]:
+        candidates = [
+            item
+            for item in self._score_single_query_candidates(query, settings, limit)
+            if item["filter_reason"] == "candidate"
+        ]
+        shortlist = candidates[: settings.candidate_k]
+        reranked = self._rerank(shortlist, settings.rerank_weight)
+        deduped = self._dedupe_results(reranked)
+        return deduped[:limit]
+
+    def debug_search(
+        self,
+        query: str,
+        top_k: int | None = None,
+        candidate_k: int | None = None,
+        keyword_weight: float | None = None,
+        semantic_weight: float | None = None,
+        rerank_weight: float | None = None,
+        min_score: float | None = None,
+        query_variants: list[str] | None = None,
+    ) -> dict[str, Any]:
+        settings = self._build_trial_settings(
+            top_k=top_k,
+            candidate_k=candidate_k,
+            keyword_weight=keyword_weight,
+            semantic_weight=semantic_weight,
+            rerank_weight=rerank_weight,
+            min_score=min_score,
+        )
+        final_top_k = settings.top_k
+        variants = self._build_query_variants(query, query_variants)
+        if not variants:
+            return {
+                "query": normalize_text(query),
+                "settings": settings.model_dump(mode="json"),
+                "query_variants": [],
+                "candidates": [],
+                "results": [],
+            }
+
+        per_query_limit = max(settings.candidate_k, final_top_k)
+        debug_candidates: list[dict[str, Any]] = []
+        result_records: list[dict[str, Any]] = []
+        candidate_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+
+        for variant in variants:
+            scored_candidates = self._score_single_query_candidates(variant.query, settings, per_query_limit)
+            eligible_candidates = [item for item in scored_candidates if item["filter_reason"] == "candidate"]
+            shortlist = eligible_candidates[: settings.candidate_k]
+            outside_candidate_k = eligible_candidates[settings.candidate_k :]
+
+            for item in scored_candidates:
+                if item["filter_reason"] == "below_min_score":
+                    debug_candidates.append(self._debug_item_from_scored(item, variant, "below_min_score"))
+
+            for item in outside_candidate_k:
+                debug_candidates.append(self._debug_item_from_scored(item, variant, "outside_candidate_k"))
+
+            for item in self._rerank(shortlist, settings.rerank_weight):
+                final_score = round(min(1.0, item.score * variant.boost), 4)
+                updated = item.model_copy(
+                    update={
+                        "score": final_score,
+                        "matched_query": variant.query,
+                        "query_variant": variant.label,
+                        "query_boost": variant.boost,
+                    }
+                )
+                debug_item = self._debug_item_from_result(updated, "candidate")
+                debug_candidates.append(debug_item)
+                candidate_by_key[(variant.label, updated.chunk_id)] = debug_item
+                result_records.append(
+                    {
+                        "result": updated,
+                        "signature": f"{updated.document_id}:{normalize_text(updated.text)[:120].lower()}",
+                        "variant_label": variant.label,
+                    }
+                )
+
+        result_records.sort(
+            key=lambda item: (
+                item["result"].score,
+                item["result"].keyword_score,
+                item["result"].semantic_score,
+                item["result"].coverage_score,
+            ),
+            reverse=True,
+        )
+
+        selected_results: list[RetrievalResult] = []
+        seen_signatures: set[str] = set()
+        for item in result_records:
+            result = item["result"]
+            debug_item = candidate_by_key.get((str(item["variant_label"]), result.chunk_id))
+            signature = str(item["signature"])
+            if signature in seen_signatures:
+                if debug_item is not None:
+                    debug_item["filter_reason"] = "duplicate"
+                continue
+            seen_signatures.add(signature)
+            if len(selected_results) < final_top_k:
+                selected_results.append(result)
+                if debug_item is not None:
+                    debug_item["filter_reason"] = "selected"
+                    debug_item["rank"] = len(selected_results)
+            elif debug_item is not None:
+                debug_item["filter_reason"] = "outside_top_k"
+
+        return {
+            "query": normalize_text(query),
+            "settings": settings.model_dump(mode="json"),
+            "query_variants": [variant.__dict__ for variant in variants],
+            "candidates": debug_candidates,
+            "results": [
+                self._debug_item_from_result(item, "selected", rank=index)
+                for index, item in enumerate(self._expand_context_results(selected_results, final_top_k), start=1)
+            ],
+        }
+
+    def _score_single_query_candidates(self, query: str, settings, limit: int) -> list[dict[str, object]]:
         normalized_query = normalize_text(query).lower()
         query_tokens = tokenize(normalized_query)
         if not query_tokens:
@@ -84,10 +207,18 @@ class RetrievalService:
             settings.semantic_weight,
         )
 
+        candidate_chunks = self._collect_candidate_chunks(
+            normalized_query,
+            query_tokens,
+            query_embedding,
+            settings,
+            limit,
+        )
+
         candidates: list[dict[str, object]] = []
-        for chunk in self.vector_store.search_candidates(normalized_query, query_embedding, limit):
-            chunk_text = normalize_text(chunk.text).lower()
-            chunk_counter = Counter(chunk.tokens)
+        for chunk in candidate_chunks:
+            chunk_text = normalize_text(self._chunk_search_text(chunk)).lower()
+            chunk_counter = Counter([*chunk.tokens, *tokenize(self._section_search_text(chunk.metadata).lower())])
             overlap = sum(min(query_counter[token], chunk_counter[token]) for token in query_counter)
             coverage = overlap / max(len(query_counter), 1)
             density = overlap / max(len(chunk.tokens), 1)
@@ -114,8 +245,9 @@ class RetrievalService:
                 semantic_score = min(1.0, semantic_cosine * 0.72 + token_jaccard * 0.28)
 
             hybrid_score = keyword_score * keyword_weight + semantic_score * semantic_weight
+            filter_reason = "candidate"
             if hybrid_score < settings.min_score and exact_phrase_bonus == 0.0:
-                continue
+                filter_reason = "below_min_score"
 
             candidates.append(
                 {
@@ -127,6 +259,7 @@ class RetrievalService:
                     "coverage_score": round(coverage, 4),
                     "title_bonus": round(title_bonus, 4),
                     "phrase_bonus": round(exact_phrase_bonus, 4),
+                    "filter_reason": filter_reason,
                 }
             )
 
@@ -138,16 +271,80 @@ class RetrievalService:
             ),
             reverse=True,
         )
-        shortlist = candidates[: settings.candidate_k]
-        reranked = self._rerank(shortlist, settings.rerank_weight)
-        deduped = self._dedupe_results(reranked)
-        return deduped[:limit]
+        return candidates
+
+    def _collect_candidate_chunks(
+        self,
+        normalized_query: str,
+        query_tokens: list[str],
+        query_embedding: list[float],
+        settings,
+        limit: int,
+    ) -> list:
+        vector_candidates = self.vector_store.search_candidates(normalized_query, query_embedding, limit)
+        keyword_candidates = self._keyword_candidate_chunks(normalized_query, query_tokens, settings, limit)
+
+        merged = []
+        seen_ids: set[str] = set()
+        for chunk in [*vector_candidates, *keyword_candidates]:
+            if chunk.id in seen_ids:
+                continue
+            seen_ids.add(chunk.id)
+            merged.append(chunk)
+        return merged
+
+    def _keyword_candidate_chunks(
+        self,
+        normalized_query: str,
+        query_tokens: list[str],
+        settings,
+        limit: int,
+    ) -> list:
+        query_counter = Counter(query_tokens)
+        scored_chunks: list[tuple[float, object]] = []
+        for chunk in self.vector_store.list_chunks():
+            chunk_text = normalize_text(self._chunk_search_text(chunk)).lower()
+            chunk_counter = Counter([*chunk.tokens, *tokenize(self._section_search_text(chunk.metadata).lower())])
+            overlap = sum(min(query_counter[token], chunk_counter[token]) for token in query_counter)
+            title_tokens = tokenize(chunk.document_title.lower())
+            title_overlap = sum(1 for token in set(query_tokens) if token in title_tokens)
+            exact_phrase = 1 if normalized_query and normalized_query in chunk_text else 0
+            if overlap <= 0 and title_overlap <= 0 and exact_phrase <= 0:
+                continue
+            coverage = overlap / max(len(query_counter), 1)
+            density = overlap / max(len(chunk.tokens), 1)
+            title_bonus = title_overlap / max(len(set(query_tokens)), 1)
+            score = coverage * 0.62 + density * 0.18 + title_bonus * 0.12 + exact_phrase * 0.08
+            scored_chunks.append((score, chunk))
+
+        scored_chunks.sort(key=lambda item: item[0], reverse=True)
+        return [chunk for _, chunk in scored_chunks[: max(settings.candidate_k, limit)]]
 
     def get_runtime_settings(self):
         return self.runtime_retrieval.get_settings()
 
     def update_runtime_settings(self, **updates: object):
         return self.runtime_retrieval.update_settings(**updates)
+
+    def _build_trial_settings(self, **updates: object) -> RetrievalSettings:
+        settings = self.runtime_retrieval.get_settings().model_copy(
+            update={key: value for key, value in updates.items() if value is not None},
+        )
+        self._validate_settings(settings)
+        return settings
+
+    @staticmethod
+    def _validate_settings(settings: RetrievalSettings) -> None:
+        if settings.top_k < 1 or settings.top_k > 10:
+            raise ValueError("top_k must be between 1 and 10")
+        if settings.candidate_k < settings.top_k or settings.candidate_k > 40:
+            raise ValueError("candidate_k must be greater than or equal to top_k and no more than 40")
+        if settings.keyword_weight < 0 or settings.semantic_weight < 0 or settings.rerank_weight < 0:
+            raise ValueError("retrieval weights cannot be negative")
+        if settings.keyword_weight + settings.semantic_weight <= 0:
+            raise ValueError("keyword_weight and semantic_weight cannot both be 0")
+        if settings.min_score < 0 or settings.min_score > 1:
+            raise ValueError("min_score must be between 0 and 1")
 
     @staticmethod
     def _build_query_variants(query: str, query_variants: list[str] | None) -> list[QueryVariant]:
@@ -207,7 +404,7 @@ class RetrievalService:
                     text=chunk.text,
                     score=round(rerank_score, 4),
                     source=f"{chunk.document_title}#chunk-{chunk.chunk_index}",
-                    display_source=f"{chunk.document_title} | 片段 {chunk.chunk_index + 1}",
+                    display_source=self._display_source(chunk),
                     retrieval_method="hybrid",
                     keyword_score=round(keyword_score, 4),
                     semantic_score=round(semantic_score, 4),
@@ -217,6 +414,7 @@ class RetrievalService:
                     matched_query="",
                     query_variant="primary",
                     query_boost=1.0,
+                    metadata=dict(chunk.metadata),
                 )
             )
 
@@ -226,17 +424,229 @@ class RetrievalService:
         )
         return reranked
 
+    def _expand_context_results(self, results: list[RetrievalResult], limit: int) -> list[RetrievalResult]:
+        expanded: list[RetrievalResult] = []
+        seen_signatures: set[str] = set()
+
+        def add_result(item: RetrievalResult) -> None:
+            signature = item.chunk_id or self._result_signature(item)
+            if signature in seen_signatures:
+                return
+            seen_signatures.add(signature)
+            expanded.append(item)
+
+        for result in results:
+            add_result(result)
+            if len(expanded) >= limit:
+                break
+            for section_result in self._same_section_chunk_results(result):
+                add_result(section_result)
+                if len(expanded) >= limit:
+                    break
+            if len(expanded) >= limit:
+                break
+            for adjacent in self._adjacent_chunk_results(result):
+                add_result(adjacent)
+                if len(expanded) >= limit:
+                    break
+            if len(expanded) >= limit:
+                break
+
+        return expanded
+
+    def _same_section_chunk_results(self, result: RetrievalResult) -> list[RetrievalResult]:
+        prefix = self._section_expansion_prefix(result.metadata)
+        if not prefix:
+            return []
+        try:
+            chunks = sorted(
+                self.vector_store.list_chunks_for_document(result.document_id),
+                key=lambda item: item.chunk_index,
+            )
+        except Exception:
+            return []
+
+        section_results: list[RetrievalResult] = []
+        for chunk in chunks:
+            if chunk.id == result.chunk_id:
+                continue
+            parts = self._section_path_parts(chunk.metadata)
+            if len(parts) < len(prefix) or parts[: len(prefix)] != prefix:
+                continue
+            section_results.append(
+                RetrievalResult(
+                    chunk_id=chunk.id,
+                    document_id=chunk.document_id,
+                    document_title=chunk.document_title,
+                    text=chunk.text,
+                    score=round(max(result.score - 0.01, settings.min_grounding_score), 4),
+                    source=f"{chunk.document_title}#chunk-{chunk.chunk_index}",
+                    display_source=self._display_source(chunk),
+                    retrieval_method="section",
+                    keyword_score=result.keyword_score,
+                    semantic_score=result.semantic_score,
+                    semantic_source=result.semantic_source,
+                    rerank_score=result.rerank_score,
+                    coverage_score=result.coverage_score,
+                    matched_query=result.matched_query,
+                    query_variant=result.query_variant,
+                    query_boost=result.query_boost,
+                    metadata=dict(chunk.metadata),
+                )
+            )
+        return section_results
+
+    def _adjacent_chunk_results(self, result: RetrievalResult) -> list[RetrievalResult]:
+        try:
+            chunks = sorted(
+                self.vector_store.list_chunks_for_document(result.document_id),
+                key=lambda item: item.chunk_index,
+            )
+        except Exception:
+            return []
+
+        by_index = {chunk.chunk_index: chunk for chunk in chunks}
+        adjacent_results: list[RetrievalResult] = []
+        for offset in (1, 2, -1):
+            chunk = by_index.get(self._chunk_index_from_result(result) + offset)
+            if chunk is None:
+                continue
+            adjacent_results.append(
+                RetrievalResult(
+                    chunk_id=chunk.id,
+                    document_id=chunk.document_id,
+                    document_title=chunk.document_title,
+                    text=chunk.text,
+                    score=round(max(result.score - 0.02 * abs(offset), settings.min_grounding_score), 4),
+                    source=f"{chunk.document_title}#chunk-{chunk.chunk_index}",
+                    display_source=self._display_source(chunk),
+                    retrieval_method="adjacent",
+                    keyword_score=result.keyword_score,
+                    semantic_score=result.semantic_score,
+                    semantic_source=result.semantic_source,
+                    rerank_score=result.rerank_score,
+                    coverage_score=result.coverage_score,
+                    matched_query=result.matched_query,
+                    query_variant=result.query_variant,
+                    query_boost=result.query_boost,
+                    metadata=dict(chunk.metadata),
+                )
+            )
+        return adjacent_results
+
+    @staticmethod
+    def _chunk_search_text(chunk) -> str:
+        section_text = RetrievalService._section_search_text(chunk.metadata)
+        if not section_text:
+            return chunk.text
+        return f"{section_text}\n{chunk.text}"
+
+    @staticmethod
+    def _section_search_text(metadata: dict[str, Any]) -> str:
+        values: list[str] = []
+        for key in ("section_path", "section_title", "section_parent_path", "section_root_title"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value:
+                values.append(value)
+        return " ".join(values)
+
+    @staticmethod
+    def _display_source(chunk) -> str:
+        section_path = chunk.metadata.get("section_path", "")
+        if isinstance(section_path, str) and section_path:
+            return f"{chunk.document_title} | {section_path} | 片段 {chunk.chunk_index + 1}"
+        return f"{chunk.document_title} | 片段 {chunk.chunk_index + 1}"
+
+    @staticmethod
+    def _section_path_parts(metadata: dict[str, Any]) -> list[str]:
+        parts = metadata.get("section_path_parts")
+        if isinstance(parts, list):
+            return [str(item) for item in parts if str(item)]
+        section_path = metadata.get("section_path")
+        if isinstance(section_path, str) and section_path:
+            return [item.strip() for item in section_path.split(">") if item.strip()]
+        return []
+
+    @staticmethod
+    def _section_expansion_prefix(metadata: dict[str, Any]) -> list[str]:
+        parts = RetrievalService._section_path_parts(metadata)
+        if not parts:
+            return []
+        return parts[:1]
+
+    @staticmethod
+    def _chunk_index_from_result(result: RetrievalResult) -> int:
+        try:
+            return int(result.source.rsplit("#chunk-", 1)[1])
+        except (IndexError, ValueError):
+            return 0
+
+    @staticmethod
+    def _debug_item_from_scored(item: dict[str, object], variant: QueryVariant, filter_reason: str) -> dict[str, Any]:
+        chunk = item["chunk"]
+        return {
+            "chunk_id": chunk.id,
+            "document_id": chunk.document_id,
+            "document_title": chunk.document_title,
+            "text": chunk.text,
+            "score": float(item["hybrid_score"]),
+            "source": f"{chunk.document_title}#chunk-{chunk.chunk_index}",
+            "display_source": RetrievalService._display_source(chunk),
+            "retrieval_method": "hybrid",
+            "keyword_score": float(item["keyword_score"]),
+            "semantic_score": float(item["semantic_score"]),
+            "semantic_source": str(item["semantic_source"]),
+            "rerank_score": 0.0,
+            "coverage_score": float(item["coverage_score"]),
+            "matched_query": variant.query,
+            "query_variant": variant.label,
+            "query_boost": variant.boost,
+            "filter_reason": filter_reason,
+            "rank": None,
+            "metadata": dict(chunk.metadata),
+            "section_path": chunk.metadata.get("section_path", ""),
+        }
+
+    @staticmethod
+    def _debug_item_from_result(item: RetrievalResult, filter_reason: str, rank: int | None = None) -> dict[str, Any]:
+        return {
+            "chunk_id": item.chunk_id,
+            "document_id": item.document_id,
+            "document_title": item.document_title,
+            "text": item.text,
+            "score": item.score,
+            "source": item.source,
+            "display_source": item.display_source,
+            "retrieval_method": item.retrieval_method,
+            "keyword_score": item.keyword_score,
+            "semantic_score": item.semantic_score,
+            "semantic_source": item.semantic_source,
+            "rerank_score": item.rerank_score,
+            "coverage_score": item.coverage_score,
+            "matched_query": item.matched_query,
+            "query_variant": item.query_variant,
+            "query_boost": item.query_boost,
+            "filter_reason": filter_reason,
+            "rank": rank,
+            "metadata": dict(item.metadata),
+            "section_path": item.metadata.get("section_path", ""),
+        }
+
     @staticmethod
     def _dedupe_results(results: list[RetrievalResult]) -> list[RetrievalResult]:
         seen_signatures: set[str] = set()
         deduped: list[RetrievalResult] = []
         for item in results:
-            signature = f"{item.document_id}:{normalize_text(item.text)[:120].lower()}"
+            signature = RetrievalService._result_signature(item)
             if signature in seen_signatures:
                 continue
             seen_signatures.add(signature)
             deduped.append(item)
         return deduped
+
+    @staticmethod
+    def _result_signature(item: RetrievalResult) -> str:
+        return normalize_text(item.text)[:180].lower()
 
     @staticmethod
     def _char_ngrams(text: str, min_n: int = 2, max_n: int = 3) -> Counter[str]:

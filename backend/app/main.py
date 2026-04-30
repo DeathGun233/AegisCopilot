@@ -30,6 +30,8 @@ from .api_schemas import (
     ModelCatalogResponse,
     ModelSelectRequest,
     ReindexResponse,
+    RetrievalDebugRequest,
+    RetrievalDebugResponse,
     RetrievalPreviewRequest,
     RetrievalPreviewResponse,
     RetrievalSettingsResponse,
@@ -689,6 +691,8 @@ def index_document(
         chunks_created = container.document_service.index_document(document_id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return IndexResponse(document_id=document_id, chunks_created=chunks_created)
 
 
@@ -719,6 +723,46 @@ def preview_retrieval(
         ),
         results=results,
     )
+
+
+@app.post("/retrieval/debug", response_model=RetrievalDebugResponse)
+def debug_retrieval(
+    request: RetrievalDebugRequest,
+    current_user: User = Depends(get_current_user),
+) -> RetrievalDebugResponse:
+    _require_admin(current_user)
+    container = get_container()
+    understanding = container.query_understanding_service.analyze(None, request.query)
+    primary_query = understanding.rewritten_query or request.query
+    variant_queries = request.query_variants
+    if not variant_queries and not understanding.needs_clarification:
+        variant_queries = [item for item in understanding.retrieval_queries if item.lower() != primary_query.lower()]
+    try:
+        debug = container.retrieval_service.debug_search(
+            primary_query,
+            top_k=request.top_k,
+            candidate_k=request.candidate_k,
+            keyword_weight=request.keyword_weight,
+            semantic_weight=request.semantic_weight,
+            rerank_weight=request.rerank_weight,
+            min_score=request.min_score,
+            query_variants=variant_queries,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    debug["understanding"] = QueryUnderstandingPreview(
+        original_query=understanding.original_query,
+        rewritten_query=understanding.rewritten_query,
+        retrieval_queries=understanding.retrieval_queries,
+        expanded_queries=understanding.expanded_queries,
+        intent=understanding.intent.value,
+        route_reason=understanding.route_reason,
+        needs_clarification=understanding.needs_clarification,
+        clarification_reason=understanding.clarification_reason,
+        clarification_prompt=understanding.clarification_prompt,
+        history_topic=understanding.history_topic,
+    ).model_dump(mode="json")
+    return RetrievalDebugResponse(debug=debug)
 
 
 @app.post("/chat", response_model=ChatResponse)

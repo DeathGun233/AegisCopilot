@@ -4,7 +4,7 @@ WORKDIR /app
 COPY pyproject.toml /app/
 COPY app /app/app
 
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -e ".[milvus]"
 
 EXPOSE 8000
 

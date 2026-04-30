@@ -8,6 +8,7 @@ import { DashboardPage } from "./pages/admin/DashboardPage";
 import { DocumentDetailPage } from "./pages/admin/DocumentDetailPage";
 import { EvaluationPage } from "./pages/admin/EvaluationPage";
 import { KnowledgePage } from "./pages/admin/KnowledgePage";
+import { RetrievalDebugPage } from "./pages/admin/RetrievalDebugPage";
 import { TracePage } from "./pages/admin/TracePage";
 import { UsersPage } from "./pages/admin/UsersPage";
 
@@ -106,6 +107,7 @@ export const router = createBrowserRouter([
               { path: "overview", element: <DashboardPage /> },
               { path: "knowledge", element: <KnowledgePage /> },
               { path: "knowledge/:documentId", element: <DocumentDetailPage /> },
+              { path: "retrieval-debug", element: <RetrievalDebugPage /> },
               { path: "traces", element: <TracePage /> },
               { path: "users", element: <UsersPage /> },
               { path: "evaluation", element: <EvaluationPage /> },

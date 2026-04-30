@@ -128,6 +128,7 @@ class RetrievalResult(BaseModel):
     matched_query: str = ""
     query_variant: str = "primary"
     query_boost: float = 1.0
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class RetrievalSettings(BaseModel):

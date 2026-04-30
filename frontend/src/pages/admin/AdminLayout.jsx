@@ -4,6 +4,7 @@ import { useAppContext } from "../../context/AppContext";
 const adminTabs = [
   { to: "/admin/overview", label: "总览" },
   { to: "/admin/knowledge", label: "知识库" },
+  { to: "/admin/retrieval-debug", label: "检索调试" },
   { to: "/admin/traces", label: "观测" },
   { to: "/admin/evaluation", label: "评估" },
   { to: "/admin/users", label: "用户" },

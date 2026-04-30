@@ -126,7 +126,13 @@ class SystemService:
 
     def _vector_check(self) -> SystemCheck:
         provider = settings.vector_store_provider.strip().lower() or "local"
-        detail = {"collection": settings.milvus_collection if provider == "milvus" else ""}
+        detail = {
+            "available_providers": ["local", "milvus"],
+            "selection_mode": "startup",
+            "restart_required_for_changes": True,
+            "collection": settings.milvus_collection if provider == "milvus" else "",
+            "uri": settings.milvus_uri if provider == "milvus" else "",
+        }
         try:
             if provider == "milvus":
                 self.vector_store.count_chunks_for_document("__aegis_status_probe__")

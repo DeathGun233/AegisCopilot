@@ -12,6 +12,9 @@ from .retrieval import RetrievalService
 from .tools import ToolService
 
 
+MAX_SUPPORTING_RESULTS = 6
+
+
 @dataclass
 class WorkflowContext:
     conversation: Conversation
@@ -373,9 +376,9 @@ class AgentService:
         if not results:
             return []
         top_score = results[0].score
-        threshold = max(settings.min_grounding_score, top_score * 0.65)
+        threshold = max(settings.min_grounding_score, top_score * 0.5)
         filtered = [item for item in results if item.score >= threshold]
-        return filtered[:3] or results[:1]
+        return filtered[:MAX_SUPPORTING_RESULTS] or results[:1]
 
     @staticmethod
     def _greeting_answer() -> str:

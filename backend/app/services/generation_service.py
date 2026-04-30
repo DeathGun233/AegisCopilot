@@ -10,6 +10,9 @@ from ..models import RetrievalResult
 from .runtime_models import RuntimeModelService
 
 
+MAX_EVIDENCE_ITEMS = 6
+
+
 @dataclass(frozen=True)
 class GenerationResult:
     content: str
@@ -213,7 +216,7 @@ class GenerationService:
                     "keyword_score": item.keyword_score,
                     "semantic_score": item.semantic_score,
                 }
-                for item in retrieval_results[:3]
+                for item in retrieval_results[:MAX_EVIDENCE_ITEMS]
             ],
             "requirements": [
                 "只使用给定证据，不要编造。",

@@ -15,7 +15,7 @@ from ..models import (
 from ..repositories import DocumentRepository, DocumentTaskRepository
 from ..vector_store import VectorStore
 from .embeddings import EmbeddingService
-from .text import normalize_text, split_into_chunks, tokenize
+from .text import normalize_text, split_into_structured_chunks, tokenize
 
 
 class DocumentService:
@@ -369,7 +369,8 @@ class DocumentService:
         return self.task_repo.save(task)
 
     def _build_chunks(self, document: Document) -> list[Chunk]:
-        chunk_texts = list(split_into_chunks(document.content))
+        structured_chunks = list(split_into_structured_chunks(document.content))
+        chunk_texts = [chunk.text for chunk in structured_chunks]
         vectors = self.embeddings.embed_texts(chunk_texts) if self.embeddings.is_enabled() else []
         embedding_version = self.embeddings.get_version() if vectors else ""
         return [
@@ -385,6 +386,7 @@ class DocumentService:
                     "department": document.department,
                     "version": document.version,
                     "tags": document.tags,
+                    **structured_chunks[index].metadata,
                 },
             )
             for index, chunk_text in enumerate(chunk_texts)

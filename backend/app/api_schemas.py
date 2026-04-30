@@ -141,6 +141,17 @@ class RetrievalPreviewRequest(BaseModel):
     top_k: int | None = None
 
 
+class RetrievalDebugRequest(BaseModel):
+    query: str
+    top_k: int | None = Field(default=None, ge=1, le=10)
+    candidate_k: int | None = Field(default=None, ge=1, le=40)
+    keyword_weight: float | None = Field(default=None, ge=0)
+    semantic_weight: float | None = Field(default=None, ge=0)
+    rerank_weight: float | None = Field(default=None, ge=0)
+    min_score: float | None = Field(default=None, ge=0, le=1)
+    query_variants: list[str] = Field(default_factory=list)
+
+
 class QueryUnderstandingPreview(BaseModel):
     original_query: str
     rewritten_query: str
@@ -157,6 +168,10 @@ class QueryUnderstandingPreview(BaseModel):
 class RetrievalPreviewResponse(BaseModel):
     understanding: QueryUnderstandingPreview
     results: list[RetrievalResult]
+
+
+class RetrievalDebugResponse(BaseModel):
+    debug: dict[str, Any]
 
 
 class RetrievalSettingsUpdateRequest(BaseModel):
