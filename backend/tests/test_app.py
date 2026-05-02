@@ -449,6 +449,52 @@ def test_sessions_do_not_persist_by_default(client: TestClient) -> None:
     assert not (settings.storage_dir / "sessions.json").exists()
 
 
+def test_seed_skips_indexing_when_milvus_embeddings_are_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app import seed
+
+    class FakeDocumentService:
+        def __init__(self) -> None:
+            self.created = []
+            self.indexed = []
+
+        def list_documents(self) -> list:
+            return []
+
+        def create_document(self, **kwargs):
+            document = type("Document", (), {"id": f"doc-{len(self.created) + 1}"})()
+            self.created.append(kwargs)
+            return document
+
+        def index_document(self, document_id: str) -> int:
+            self.indexed.append(document_id)
+            raise ValueError("MilvusVectorStore requires chunk embeddings.")
+
+    class FakeEmbeddingService:
+        def is_enabled(self) -> bool:
+            return False
+
+    fake_document_service = FakeDocumentService()
+    fake_container = type(
+        "Container",
+        (),
+        {
+            "document_service": fake_document_service,
+            "embedding_service": FakeEmbeddingService(),
+        },
+    )()
+
+    original_provider = settings.vector_store_provider
+    settings.vector_store_provider = "milvus"
+    monkeypatch.setattr(seed, "get_container", lambda: fake_container)
+    try:
+        seed.main()
+    finally:
+        settings.vector_store_provider = original_provider
+
+    assert len(fake_document_service.created) == len(seed.SAMPLE_DOCS)
+    assert fake_document_service.indexed == []
+
+
 def test_non_demo_environment_rejects_default_passwords(client: TestClient) -> None:
     original = _with_auth_settings(
         allow_demo_auth=False,

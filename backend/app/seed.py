@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .config import settings
 from .deps import get_container
 
 
@@ -42,6 +43,10 @@ def main() -> None:
     if container.document_service.list_documents():
         print("示例文档已存在，跳过初始化。")
         return
+    should_index = not (
+        settings.vector_store_provider == "milvus"
+        and not container.embedding_service.is_enabled()
+    )
     for item in SAMPLE_DOCS:
         document = container.document_service.create_document(
             title=item["title"],
@@ -51,8 +56,13 @@ def main() -> None:
             version="v1",
             tags=item["tags"],
         )
+        if not should_index:
+            continue
         container.document_service.index_document(document.id)
-    print("已初始化示例文档。")
+    if should_index:
+        print("已初始化示例文档。")
+    else:
+        print("已初始化示例文档；当前 Milvus 模式未启用 embedding，已跳过启动期示例索引。")
 
 
 if __name__ == "__main__":

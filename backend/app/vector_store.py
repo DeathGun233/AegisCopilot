@@ -162,26 +162,10 @@ class MilvusVectorStore:
         return [self._record_to_chunk(hit) for hit in hits]
 
     def list_chunks(self) -> list[Chunk]:
-        return [
-            self._record_to_chunk(item)
-            for item in self.client.query(
-                collection_name=self.collection,
-                filter='id != ""',
-                output_fields=self.output_fields,
-                limit=self.query_limit,
-            )
-        ]
+        return [self._record_to_chunk(item) for item in self._query_all(filter_value='id != ""')]
 
     def list_chunks_for_document(self, document_id: str) -> list[Chunk]:
-        return [
-            self._record_to_chunk(item)
-            for item in self.client.query(
-                collection_name=self.collection,
-                filter=self._document_filter(document_id),
-                output_fields=self.output_fields,
-                limit=self.query_limit,
-            )
-        ]
+        return [self._record_to_chunk(item) for item in self._query_all(filter_value=self._document_filter(document_id))]
 
     def count_chunks_for_document(self, document_id: str) -> int:
         return len(self.list_chunks_for_document(document_id))
@@ -197,6 +181,25 @@ class MilvusVectorStore:
             if chunk.embedding:
                 item["embedded_chunk_count"] += 1
         return stats
+
+    def _query_all(self, *, filter_value: str) -> list[object]:
+        records: list[object] = []
+        page_size = max(int(self.query_limit), 1)
+        iterator = self.client.query_iterator(
+            collection_name=self.collection,
+            filter=filter_value,
+            output_fields=self.output_fields,
+            batch_size=page_size,
+        )
+        try:
+            while True:
+                page = iterator.next()
+                if not page:
+                    break
+                records.extend(page)
+        finally:
+            iterator.close()
+        return records
 
     def _chunk_to_record(self, chunk: Chunk) -> dict[str, object]:
         if not chunk.embedding:
@@ -237,6 +240,8 @@ class MilvusVectorStore:
 
     @staticmethod
     def _flatten_record(raw: Any) -> dict[str, Any]:
+        if not isinstance(raw, dict) and hasattr(raw, "to_dict"):
+            raw = raw.to_dict()
         if isinstance(raw, dict):
             record = dict(raw)
         else:

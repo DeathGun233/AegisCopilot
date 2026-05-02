@@ -266,6 +266,26 @@ def test_migration_skips_legacy_or_expired_sessions_in_report_and_database(tmp_p
     assert sessions.get("session-legacy") is None
 
 
+def test_sql_session_repository_deletes_expired_session_without_recursion(tmp_path: Path) -> None:
+    from app.models import AuthSession, utc_now
+    from app.sql_repositories import SqlDatabase, SqlSessionRepository
+
+    database_url = f"sqlite:///{(tmp_path / 'expired-session.db').as_posix()}"
+    sessions = SqlSessionRepository(SqlDatabase(database_url))
+    now = utc_now()
+    expired_session = AuthSession(
+        token="expired-token",
+        user_id="admin",
+        created_at=now - timedelta(hours=2),
+        last_seen_at=now - timedelta(hours=2),
+        expires_at=now - timedelta(hours=1),
+    )
+    sessions.save(expired_session)
+
+    assert sessions.get(expired_session.token) is None
+    assert sessions.delete(expired_session.token) is False
+
+
 def test_alembic_initial_migration_covers_sql_persistence_tables() -> None:
     migration_path = ROOT / "backend" / "alembic" / "versions" / "0001_initial_sql_persistence.py"
     content = migration_path.read_text(encoding="utf-8")

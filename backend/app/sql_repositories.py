@@ -546,8 +546,12 @@ class SqlSessionRepository:
         return session
 
     def delete(self, token: str) -> bool:
-        existing = self.get(token)
-        if existing is None:
+        row = self.db.execute(
+            "SELECT token FROM sessions WHERE token = ?",
+            (token,),
+            fetch="one",
+        )
+        if row is None:
             return False
         self.db.execute("DELETE FROM sessions WHERE token = ?", (token,))
         return True

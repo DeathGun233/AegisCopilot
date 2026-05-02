@@ -384,6 +384,85 @@ def test_retrieval_debug_handles_empty_query(tmp_path: Path) -> None:
     assert debug["results"] == []
 
 
+def test_bm25_keyword_index_prefers_rare_exact_policy_terms() -> None:
+    from app.services.retrieval import BM25KeywordIndex
+
+    generic = Chunk(
+        id="chunk-generic",
+        document_id="doc-admission",
+        document_title="招生简章",
+        text="报考条件。报考条件。报考条件。考生应符合学校规定的基本条件。",
+        chunk_index=0,
+        tokens=["报考", "条件", "报", "考", "条", "件"] * 3,
+        embedding=[],
+        embedding_version="",
+        metadata={"section_path": "报考条件"},
+    )
+    rare = Chunk(
+        id="chunk-single-exam",
+        document_id="doc-admission",
+        document_title="招生简章",
+        text="报考条件 > 单独考试。报名参加单独考试的人员须经所在单位同意。",
+        chunk_index=1,
+        tokens=["报考", "条件", "单独", "考试", "单独考试", "报名", "人员"],
+        embedding=[],
+        embedding_version="",
+        metadata={"section_path": "报考条件 > 单独考试"},
+    )
+
+    results = BM25KeywordIndex([generic, rare]).search("单独考试报考条件", limit=2)
+
+    assert [chunk.id for chunk in results] == ["chunk-single-exam", "chunk-generic"]
+
+
+def test_retrieval_keyword_candidates_are_ranked_by_bm25(tmp_path: Path) -> None:
+    from app.services.retrieval import RetrievalService
+
+    generic = Chunk(
+        id="chunk-generic",
+        document_id="doc-admission",
+        document_title="招生简章",
+        text="报考条件。报考条件。报考条件。考生应符合学校规定的基本条件。",
+        chunk_index=0,
+        tokens=["报考", "条件", "报", "考", "条", "件"] * 3,
+        embedding=[],
+        embedding_version="",
+        metadata={"section_path": "报考条件"},
+    )
+    rare = Chunk(
+        id="chunk-single-exam",
+        document_id="doc-admission",
+        document_title="招生简章",
+        text="报考条件 > 单独考试。报名参加单独考试的人员须经所在单位同意。",
+        chunk_index=1,
+        tokens=["报考", "条件", "单独", "考试", "单独考试", "报名", "人员"],
+        embedding=[],
+        embedding_version="",
+        metadata={"section_path": "报考条件 > 单独考试"},
+    )
+    vector_miss = Chunk(
+        id="chunk-vector-miss",
+        document_id="doc-admission",
+        document_title="招生简章",
+        text="招生办公室联系方式。",
+        chunk_index=2,
+        tokens=["招生", "办公室", "联系"],
+        embedding=[],
+        embedding_version="",
+        metadata={},
+    )
+    service = RetrievalService(
+        repo=RejectingDocumentRepository(),
+        vector_store=StaticVectorStore([generic, rare, vector_miss], search_chunks=[vector_miss]),
+        runtime_retrieval=RuntimeRetrievalService(tmp_path / "runtime_retrieval.json"),
+        embeddings=DisabledEmbeddings(),
+    )
+
+    results = service.search("单独考试报考条件", top_k=1)
+
+    assert [item.chunk_id for item in results] == ["chunk-single-exam"]
+
+
 def test_local_vector_store_delegates_to_existing_chunk_storage() -> None:
     from app.vector_store import LocalVectorStore
 
@@ -420,6 +499,91 @@ def test_local_vector_store_delegates_to_existing_chunk_storage() -> None:
     assert vector_store.search_candidates("local", [], limit=1)[0].id == chunk.id
     assert vector_store.delete_document(document.id) is True
     assert vector_store.count_chunks_for_document(document.id) == 0
+
+
+def test_milvus_vector_store_pages_list_and_stats_queries(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.vector_store import MilvusVectorStore
+
+    def record(index: int, document_id: str) -> dict[str, object]:
+        return {
+            "id": f"chunk-{index}",
+            "document_id": document_id,
+            "document_title": "Paged Policy",
+            "text": f"paged text {index}",
+            "chunk_index": index,
+            "tokens_json": '["paged"]',
+            "embedding": [0.1, 0.2, 0.3],
+            "embedding_version": "test-v1",
+            "metadata_json": "{}",
+        }
+
+    class FakeQueryIterator:
+        def __init__(self, records: list[dict[str, object]], *, batch_size: int) -> None:
+            self.records = records
+            self.batch_size = batch_size
+            self.offset = 0
+            self.closed = False
+
+        def next(self) -> list[dict[str, object]]:
+            page = self.records[self.offset : self.offset + self.batch_size]
+            self.offset += self.batch_size
+            return page
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeMilvusClient:
+        def __init__(self, *, uri: str, token: str | None = None) -> None:
+            self.records = [
+                record(0, "doc-a"),
+                record(1, "doc-a"),
+                record(2, "doc-a"),
+                record(3, "doc-b"),
+                record(4, "doc-b"),
+            ]
+            self.query_calls: list[dict[str, object]] = []
+
+        def has_collection(self, collection_name: str) -> bool:
+            return True
+
+        def query(self, **kwargs: object) -> list[dict[str, object]]:
+            raise AssertionError("list queries must use query_iterator instead of offset pagination")
+
+        def query_iterator(self, **kwargs: object) -> FakeQueryIterator:
+            self.query_calls.append(kwargs)
+            batch_size = int(kwargs.get("batch_size", 100))
+            items = self.records
+            if kwargs.get("filter") == '"doc-a"':
+                items = [item for item in self.records if item["document_id"] == "doc-a"]
+            if kwargs.get("filter") == 'document_id == "doc-a"':
+                items = [item for item in self.records if item["document_id"] == "doc-a"]
+            return FakeQueryIterator(items, batch_size=batch_size)
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "pymilvus",
+        SimpleNamespace(MilvusClient=FakeMilvusClient, DataType=SimpleNamespace(VARCHAR="varchar")),
+    )
+    store = MilvusVectorStore(
+        uri="http://localhost:19530",
+        token="",
+        collection="aegis_chunks",
+        dimension=3,
+        query_limit=2,
+    )
+
+    assert [chunk.id for chunk in store.list_chunks()] == [
+        "chunk-0",
+        "chunk-1",
+        "chunk-2",
+        "chunk-3",
+        "chunk-4",
+    ]
+    assert store.count_chunks_for_document("doc-a") == 3
+    assert store.get_chunk_stats() == {
+        "doc-a": {"chunk_count": 3, "embedded_chunk_count": 3},
+        "doc-b": {"chunk_count": 2, "embedded_chunk_count": 2},
+    }
 
 
 def test_settings_default_to_local_vector_store_provider() -> None:

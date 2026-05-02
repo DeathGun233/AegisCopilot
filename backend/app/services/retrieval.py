@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,6 +22,94 @@ class QueryVariant:
     boost: float
 
 
+class BM25KeywordIndex:
+    def __init__(self, chunks: list, *, extra_text_builder=None) -> None:
+        self.chunks_by_id = {chunk.id: chunk for chunk in chunks}
+        self.inverted_index: dict[str, dict[str, int]] = defaultdict(dict)
+        self.document_lengths: dict[str, int] = {}
+        self.document_frequency: Counter[str] = Counter()
+        self.average_document_length = 0.0
+        self.extra_text_builder = extra_text_builder or (lambda chunk: "")
+        self._build(chunks)
+
+    def search(self, query: str, limit: int) -> list:
+        if limit <= 0 or not self.chunks_by_id:
+            return []
+        query_terms = self._terms_for_text(normalize_text(query).lower())
+        if not query_terms:
+            return []
+
+        scores: dict[str, float] = defaultdict(float)
+        matched_terms: dict[str, set[str]] = defaultdict(set)
+        unique_query_terms = set(query_terms)
+        for term in unique_query_terms:
+            postings = self.inverted_index.get(term)
+            if not postings:
+                continue
+            idf = self._idf(term)
+            for chunk_id, frequency in postings.items():
+                scores[chunk_id] += idf * self._term_score(
+                    frequency,
+                    self.document_lengths.get(chunk_id, 0),
+                )
+                matched_terms[chunk_id].add(term)
+
+        for chunk_id in list(scores):
+            coverage = len(matched_terms[chunk_id]) / max(len(unique_query_terms), 1)
+            scores[chunk_id] *= coverage * coverage
+
+        ranked = sorted(
+            scores.items(),
+            key=lambda item: (
+                item[1],
+                self.chunks_by_id[item[0]].chunk_index * -1,
+            ),
+            reverse=True,
+        )
+        return [self.chunks_by_id[chunk_id] for chunk_id, _ in ranked[:limit]]
+
+    def _build(self, chunks: list) -> None:
+        total_length = 0
+        for chunk in chunks:
+            terms = self._chunk_terms(chunk)
+            term_counts = Counter(terms)
+            self.document_lengths[chunk.id] = len(terms)
+            total_length += len(terms)
+            for term, frequency in term_counts.items():
+                self.inverted_index[term][chunk.id] = frequency
+                self.document_frequency[term] += 1
+        self.average_document_length = total_length / max(len(chunks), 1)
+
+    def _chunk_terms(self, chunk) -> list[str]:
+        values = [
+            *chunk.tokens,
+            *self._terms_for_text(" ".join(chunk.tokens).lower()),
+            *tokenize(chunk.document_title.lower()),
+            *self._terms_for_text(chunk.document_title.lower()),
+            *self._terms_for_text(normalize_text(self.extra_text_builder(chunk)).lower()),
+        ]
+        return [term for term in values if term]
+
+    @staticmethod
+    def _terms_for_text(text: str) -> list[str]:
+        terms = tokenize(text)
+        for span in re.findall(r"[\u4e00-\u9fff]{2,}", text):
+            for size in range(3, min(6, len(span)) + 1):
+                terms.extend(span[index : index + size] for index in range(len(span) - size + 1))
+        return terms
+
+    def _idf(self, term: str) -> float:
+        total_documents = max(len(self.chunks_by_id), 1)
+        frequency = self.document_frequency.get(term, 0)
+        return math.log(1 + (total_documents - frequency + 0.5) / (frequency + 0.5))
+
+    def _term_score(self, frequency: int, document_length: int) -> float:
+        k1 = 1.5
+        b = 0.75
+        length_norm = document_length / max(self.average_document_length, 1.0)
+        return (frequency * (k1 + 1)) / (frequency + k1 * (1 - b + b * length_norm))
+
+
 class RetrievalService:
     def __init__(
         self,
@@ -34,6 +122,8 @@ class RetrievalService:
         self.vector_store = vector_store
         self.runtime_retrieval = runtime_retrieval
         self.embeddings = embeddings
+        self._keyword_index_signature: tuple[tuple[str, int, int, str], ...] | None = None
+        self._keyword_index: BM25KeywordIndex | None = None
 
     def search(
         self,
@@ -300,25 +390,20 @@ class RetrievalService:
         settings,
         limit: int,
     ) -> list:
-        query_counter = Counter(query_tokens)
-        scored_chunks: list[tuple[float, object]] = []
-        for chunk in self.vector_store.list_chunks():
-            chunk_text = normalize_text(self._chunk_search_text(chunk)).lower()
-            chunk_counter = Counter([*chunk.tokens, *tokenize(self._section_search_text(chunk.metadata).lower())])
-            overlap = sum(min(query_counter[token], chunk_counter[token]) for token in query_counter)
-            title_tokens = tokenize(chunk.document_title.lower())
-            title_overlap = sum(1 for token in set(query_tokens) if token in title_tokens)
-            exact_phrase = 1 if normalized_query and normalized_query in chunk_text else 0
-            if overlap <= 0 and title_overlap <= 0 and exact_phrase <= 0:
-                continue
-            coverage = overlap / max(len(query_counter), 1)
-            density = overlap / max(len(chunk.tokens), 1)
-            title_bonus = title_overlap / max(len(set(query_tokens)), 1)
-            score = coverage * 0.62 + density * 0.18 + title_bonus * 0.12 + exact_phrase * 0.08
-            scored_chunks.append((score, chunk))
+        if not query_tokens:
+            return []
+        return self._get_keyword_index().search(normalized_query, max(settings.candidate_k, limit))
 
-        scored_chunks.sort(key=lambda item: item[0], reverse=True)
-        return [chunk for _, chunk in scored_chunks[: max(settings.candidate_k, limit)]]
+    def _get_keyword_index(self) -> BM25KeywordIndex:
+        chunks = self.vector_store.list_chunks()
+        signature = tuple(
+            (chunk.id, chunk.chunk_index, len(chunk.text), chunk.embedding_version)
+            for chunk in chunks
+        )
+        if self._keyword_index is None or self._keyword_index_signature != signature:
+            self._keyword_index = BM25KeywordIndex(chunks, extra_text_builder=self._chunk_search_text)
+            self._keyword_index_signature = signature
+        return self._keyword_index
 
     def get_runtime_settings(self):
         return self.runtime_retrieval.get_settings()
