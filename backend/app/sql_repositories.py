@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from .models import (
     AgentTask,
+    AuthAuditEvent,
     AuthSession,
     Chunk,
     Conversation,
@@ -162,6 +163,18 @@ class SqlDatabase:
             """,
             "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id)",
             "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at)",
+            """
+            CREATE TABLE IF NOT EXISTS auth_audit_events (
+              id TEXT PRIMARY KEY,
+              created_at TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              event TEXT NOT NULL,
+              success INTEGER NOT NULL,
+              payload TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_auth_audit_created_at ON auth_audit_events (created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_auth_audit_user_id ON auth_audit_events (user_id)",
             """
             CREATE TABLE IF NOT EXISTS runtime_settings (
               key TEXT PRIMARY KEY,
@@ -556,6 +569,15 @@ class SqlSessionRepository:
         self.db.execute("DELETE FROM sessions WHERE token = ?", (token,))
         return True
 
+    def delete_for_user(self, user_id: str) -> int:
+        rows = self.db.execute(
+            "SELECT token FROM sessions WHERE user_id = ?",
+            (user_id,),
+            fetch="all",
+        )
+        self.db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        return len(rows)
+
     def delete_expired(self) -> int:
         now = utc_now().isoformat()
         rows = self.db.execute(
@@ -565,6 +587,38 @@ class SqlSessionRepository:
         )
         self.db.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
         return len(rows)
+
+
+class SqlAuthAuditRepository:
+    def __init__(self, db: SqlDatabase) -> None:
+        self.db = db
+
+    def record(self, event: AuthAuditEvent) -> AuthAuditEvent:
+        self.db.execute("DELETE FROM auth_audit_events WHERE id = ?", (event.id,))
+        self.db.execute(
+            """
+            INSERT INTO auth_audit_events (id, created_at, user_id, event, success, payload)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.id,
+                event.created_at.isoformat(),
+                event.user_id,
+                event.event,
+                1 if event.success else 0,
+                _serialize_model(event),
+            ),
+        )
+        return event
+
+    def list(self, limit: int | None = None) -> list[AuthAuditEvent]:
+        statement = "SELECT payload FROM auth_audit_events ORDER BY created_at DESC"
+        params: tuple = ()
+        if limit is not None and limit >= 0:
+            statement += " LIMIT ?"
+            params = (limit,)
+        rows = self.db.execute(statement, params, fetch="all")
+        return [_deserialize_model(AuthAuditEvent, row["payload"] if hasattr(row, "keys") else row[0]) for row in rows]
 
 
 class SqlRuntimeSettingsRepository:

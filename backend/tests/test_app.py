@@ -28,6 +28,10 @@ def client(tmp_path: Path):
         "vector_store_provider": settings.vector_store_provider,
         "milvus_uri": settings.milvus_uri,
         "milvus_collection": settings.milvus_collection,
+        "admin_password_hash": settings.admin_password_hash,
+        "member_password_hash": settings.member_password_hash,
+        "auth_max_failed_attempts": settings.auth_max_failed_attempts,
+        "auth_lockout_minutes": settings.auth_lockout_minutes,
     }
 
     settings.storage_dir = tmp_path / "storage"
@@ -42,6 +46,10 @@ def client(tmp_path: Path):
     settings.vector_store_provider = "local"
     settings.milvus_uri = "http://localhost:19530"
     settings.milvus_collection = "aegis_chunks"
+    settings.admin_password_hash = ""
+    settings.member_password_hash = ""
+    settings.auth_max_failed_attempts = 5
+    settings.auth_lockout_minutes = 15
     ensure_storage_dirs()
     reset_container()
 
@@ -510,6 +518,84 @@ def test_non_demo_environment_rejects_default_passwords(client: TestClient) -> N
         assert "默认演示密码" in response.json()["detail"]
     finally:
         _restore_auth_settings(original)
+
+
+def test_non_demo_environment_requires_hashed_passwords(client: TestClient) -> None:
+    from app.services.auth import hash_password
+
+    original = _with_auth_settings(
+        allow_demo_auth=False,
+        admin_password="admin123",
+        member_password="member123",
+        admin_password_hash=hash_password("rotated-admin-password"),
+        member_password_hash=hash_password("rotated-member-password"),
+    )
+    try:
+        default_response = client.post(
+            "/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        assert default_response.status_code == 401
+
+        response = client.post(
+            "/auth/login",
+            json={"username": "admin", "password": "rotated-admin-password"},
+        )
+        assert response.status_code == 200
+    finally:
+        _restore_auth_settings(original)
+
+
+def test_login_rate_limit_blocks_repeated_failures(client: TestClient) -> None:
+    original = _with_auth_settings(
+        auth_max_failed_attempts=2,
+        auth_lockout_minutes=15,
+    )
+    try:
+        for _ in range(2):
+            response = client.post(
+                "/auth/login",
+                json={"username": "admin", "password": "wrong-password"},
+            )
+            assert response.status_code == 401
+
+        locked_response = client.post(
+            "/auth/login",
+            json={"username": "admin", "password": settings.admin_password},
+        )
+        assert locked_response.status_code == 401
+        assert "too many" in locked_response.json()["detail"].lower()
+    finally:
+        _restore_auth_settings(original)
+
+
+def test_admin_can_revoke_sessions_and_view_auth_audit(client: TestClient) -> None:
+    admin_headers = _login_as_admin(client)
+    failed_response = client.post(
+        "/auth/login",
+        json={"username": "member", "password": "wrong-password"},
+    )
+    assert failed_response.status_code == 401
+
+    member_headers = _login_as_member(client)
+    member_token = member_headers["Authorization"].split(" ", 1)[1]
+    assert client.get("/auth/me", headers=member_headers).status_code == 200
+
+    revoke_response = client.post(
+        "/auth/sessions/revoke",
+        json={"token": member_token},
+        headers=admin_headers,
+    )
+    assert revoke_response.status_code == 200
+    assert revoke_response.json()["revoked_sessions"] == 1
+    assert client.get("/auth/me", headers=member_headers).status_code == 401
+
+    audit_response = client.get("/auth/audit", headers=admin_headers)
+    assert audit_response.status_code == 200
+    events = [item["event"] for item in audit_response.json()["events"]]
+    assert "login_succeeded" in events
+    assert "login_failed" in events
+    assert "session_revoked" in events
 
 
 def test_async_reindex_task_flow(client: TestClient) -> None:

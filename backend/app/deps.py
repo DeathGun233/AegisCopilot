@@ -9,6 +9,7 @@ from .config import settings
 from .models import User
 from .vector_store import LocalVectorStore, MilvusVectorStore, VectorStore
 from .repositories import (
+    AuthAuditRepository,
     ConversationRepository,
     DocumentRepository,
     DocumentTaskRepository,
@@ -18,6 +19,7 @@ from .repositories import (
     UserRepository,
 )
 from .sql_repositories import (
+    SqlAuthAuditRepository,
     SqlConversationRepository,
     SqlDatabase,
     SqlDocumentRepository,
@@ -59,6 +61,7 @@ class Container:
                 if settings.persist_auth_sessions
                 else SessionRepository(None)
             )
+            self.auth_audit = SqlAuthAuditRepository(database)
             self.tasks = SqlTaskRepository(database)
             self.runtime_retrieval_service = RuntimeRetrievalService(
                 storage / "runtime_retrieval.json",
@@ -78,6 +81,7 @@ class Container:
             self.users = UserRepository(JsonStore(storage / "users.json"))
             session_store = JsonStore(storage / "sessions.json") if settings.persist_auth_sessions else None
             self.sessions = SessionRepository(session_store)
+            self.auth_audit = AuthAuditRepository(JsonStore(storage / "auth_audit.json"))
             self.tasks = TaskRepository(JsonStore(storage / "tasks.json"))
             self.runtime_retrieval_service = RuntimeRetrievalService(storage / "runtime_retrieval.json")
             self.runtime_model_service = RuntimeModelService(storage / "runtime_model.json")
@@ -99,7 +103,7 @@ class Container:
         self.query_understanding_service = QueryUnderstandingService()
         self.tool_service = ToolService(self.retrieval_service)
         self.user_service = UserService(self.users)
-        self.auth_service = AuthService(self.users, self.sessions)
+        self.auth_service = AuthService(self.users, self.sessions, self.auth_audit)
         self.generation_service = GenerationService(self.runtime_model_service)
         self.agent_service = AgentService(
             retrieval=self.retrieval_service,

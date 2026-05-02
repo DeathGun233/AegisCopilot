@@ -7,6 +7,7 @@ from .api_schemas import (
     AgentTaskDetailResponse,
     AgentTaskListResponse,
     AgentTaskSummary,
+    AuthAuditListResponse,
     BulkReindexRequest,
     BulkReindexResponse,
     ChatRequest,
@@ -36,6 +37,8 @@ from .api_schemas import (
     RetrievalPreviewResponse,
     RetrievalSettingsResponse,
     RetrievalSettingsUpdateRequest,
+    SessionRevokeRequest,
+    SessionRevokeResponse,
     SystemStatsResponse,
     SystemStatusResponse,
     QueryUnderstandingPreview,
@@ -364,6 +367,34 @@ def logout(
     container = get_container()
     container.auth_service.logout(_extract_bearer_token(authorization))
     return LogoutResponse(success=True)
+
+
+@app.post("/auth/sessions/revoke", response_model=SessionRevokeResponse)
+def revoke_auth_sessions(
+    request: SessionRevokeRequest,
+    current_user: User = Depends(get_current_user),
+) -> SessionRevokeResponse:
+    _require_admin(current_user)
+    container = get_container()
+    try:
+        revoked = container.auth_service.revoke_sessions(
+            token=request.token,
+            user_id=request.user_id,
+            actor_id=current_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return SessionRevokeResponse(revoked_sessions=revoked)
+
+
+@app.get("/auth/audit", response_model=AuthAuditListResponse)
+def list_auth_audit(
+    limit: int = 100,
+    current_user: User = Depends(get_current_user),
+) -> AuthAuditListResponse:
+    _require_admin(current_user)
+    container = get_container()
+    return AuthAuditListResponse(events=container.auth_service.list_audit_events(limit=limit))
 
 
 @app.get("/auth/me", response_model=CurrentUserResponse)

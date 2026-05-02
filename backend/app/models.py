@@ -172,6 +172,17 @@ class AuthSession(BaseModel):
     expires_at: datetime = Field(default_factory=utc_now)
 
 
+class AuthAuditEvent(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    event: str
+    success: bool
+    username: str = ""
+    user_id: str = ""
+    actor_id: str = ""
+    reason: str = ""
+    created_at: datetime = Field(default_factory=utc_now)
+
+
 class AgentTask(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     user_id: str = "admin"
