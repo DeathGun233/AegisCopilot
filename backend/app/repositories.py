@@ -7,6 +7,7 @@ from typing import Iterable
 
 from .models import (
     AgentTask,
+    AuthAuditEvent,
     AuthSession,
     Chunk,
     Conversation,
@@ -324,6 +325,14 @@ class SessionRepository:
         self._persist()
         return True
 
+    def delete_for_user(self, user_id: str) -> int:
+        tokens = [token for token, session in self._store.items() if session.user_id == user_id]
+        for token in tokens:
+            del self._store[token]
+        if tokens:
+            self._persist()
+        return len(tokens)
+
     def delete_expired(self) -> int:
         now = utc_now()
         expired_tokens = [token for token, session in self._store.items() if session.expires_at <= now]
@@ -332,6 +341,31 @@ class SessionRepository:
         if expired_tokens:
             self._persist()
         return len(expired_tokens)
+
+    def _persist(self) -> None:
+        if self.store:
+            self.store.save([item.model_dump(mode="json") for item in self._store.values()])
+
+
+class AuthAuditRepository:
+    def __init__(self, store: JsonStore | None = None) -> None:
+        self._store: OrderedDict[str, AuthAuditEvent] = OrderedDict()
+        self.store = store
+        if self.store and self.store.path.exists():
+            for record in self.store.load():
+                event = AuthAuditEvent.model_validate(record)
+                self._store[event.id] = event
+
+    def record(self, event: AuthAuditEvent) -> AuthAuditEvent:
+        self._store[event.id] = event
+        self._persist()
+        return event
+
+    def list(self, limit: int | None = None) -> list[AuthAuditEvent]:
+        events = sorted(self._store.values(), key=lambda item: item.created_at, reverse=True)
+        if limit is not None and limit >= 0:
+            return events[:limit]
+        return events
 
     def _persist(self) -> None:
         if self.store:

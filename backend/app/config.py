@@ -70,6 +70,10 @@ class Settings(BaseModel):
     )
     admin_password: str = os.getenv("AEGIS_ADMIN_PASSWORD", "admin123")
     member_password: str = os.getenv("AEGIS_MEMBER_PASSWORD", "member123")
+    admin_password_hash: str = os.getenv("AEGIS_ADMIN_PASSWORD_HASH", "")
+    member_password_hash: str = os.getenv("AEGIS_MEMBER_PASSWORD_HASH", "")
+    auth_max_failed_attempts: int = int(os.getenv("AEGIS_AUTH_MAX_FAILED_ATTEMPTS", "5"))
+    auth_lockout_minutes: int = int(os.getenv("AEGIS_AUTH_LOCKOUT_MINUTES", "15"))
 
 
 def ensure_storage_dirs() -> None:

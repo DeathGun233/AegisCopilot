@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .models import (
     AgentTask,
+    AuthAuditEvent,
     Conversation,
     Document,
     DocumentTask,
@@ -225,6 +226,19 @@ class LoginResponse(BaseModel):
 
 class LogoutResponse(BaseModel):
     success: bool = True
+
+
+class SessionRevokeRequest(BaseModel):
+    token: str | None = None
+    user_id: str | None = None
+
+
+class SessionRevokeResponse(BaseModel):
+    revoked_sessions: int
+
+
+class AuthAuditListResponse(BaseModel):
+    events: list[AuthAuditEvent] = Field(default_factory=list)
 
 
 class EvaluationResponse(BaseModel):
