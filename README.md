@@ -1,5 +1,7 @@
 # AegisCopilot
 
+本地启动请优先看：[本地启动指令](docs/16-local-startup.md)。
+
 AegisCopilot 是一个面向企业知识库问答的 RAG Agent 学习项目。当前版本已经具备真实登录鉴权、知识库治理、混合检索、DashScope Embedding、查询理解、Trace 观测、离线评测和异步索引等能力，适合作为求职作品与面试演示项目。
 
 ## 当前能力
