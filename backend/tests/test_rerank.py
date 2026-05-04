@@ -45,10 +45,10 @@ def _candidate(
     }
 
 
-def test_rerank_settings_default_to_heuristic() -> None:
+def test_rerank_settings_default_to_qwen() -> None:
     settings = Settings()
 
-    assert settings.rerank_provider == "heuristic"
+    assert settings.rerank_provider == "qwen"
     assert settings.rerank_model == "qwen3-vl-rerank"
     assert settings.rerank_top_n == 40
     assert settings.rerank_base_url.endswith("/api/v1/services/rerank/text-rerank/text-rerank")

@@ -101,9 +101,9 @@ Get-NetTCPConnection -LocalPort 8002,5173 -ErrorAction SilentlyContinue |
 Stop-Process -Id <PID>
 ```
 
-## 6. 可选：启用 Qwen rerank
+## 6. Qwen rerank 默认配置
 
-当前 rerank 默认仍是本地 heuristic。需要启用 Qwen `qwen3-vl-rerank` 时，在启动后端前设置：
+当前 rerank 默认使用 Qwen `qwen3-vl-rerank`。启动后端前建议设置 DashScope API Key：
 
 ```powershell
 $env:AEGIS_RERANK_PROVIDER = "qwen"
@@ -118,4 +118,10 @@ cd D:\codex_create\backend
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8002
 ```
 
-如果不设置这些变量，系统会继续使用默认 heuristic rerank，不影响本地启动。
+如果没有设置 `AEGIS_RERANK_API_KEY`，系统会保留启动能力，并在 rerank 阶段 fallback 到本地 heuristic；这只是降级兜底，不再是默认设计。
+
+如果确实需要临时禁用 Qwen rerank，可以显式设置：
+
+```powershell
+$env:AEGIS_RERANK_PROVIDER = "heuristic"
+```
