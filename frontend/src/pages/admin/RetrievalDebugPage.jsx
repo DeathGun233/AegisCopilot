@@ -28,6 +28,7 @@ const filterLabels = {
   duplicate: "重复片段",
   below_min_score: "低于阈值",
   outside_candidate_k: "超出候选池",
+  context_expansion: "扩展上下文",
   candidate: "候选",
 };
 
@@ -62,6 +63,13 @@ function summarizeFilters(candidates = []) {
 
 function sectionPath(item) {
   return item.section_path || item.metadata?.section_path || "";
+}
+
+function resultRankLabel(item) {
+  if (item.result_type === "context") {
+    return `Context #${item.context_rank || item.rank || "-"}`;
+  }
+  return `Hit #${item.hit_rank || item.rank || "-"}`;
 }
 
 function ConfigFields({ config, onChange }) {
@@ -174,7 +182,7 @@ function DebugColumn({ title, debug }) {
                   className={`chunk-card ${item.result_type === "context" ? "context-expansion" : ""}`}
                 >
                   <strong>
-                    #{item.rank} {item.display_source || item.source} ·{" "}
+                    {resultRankLabel(item)} {item.display_source || item.source} ·{" "}
                     {resultTypeLabels[item.result_type || "hit"] || item.result_type}
                   </strong>
                   {sectionPath(item) ? <small>章节 {sectionPath(item)}</small> : null}

@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import Any
 import re
 
+from .logistics_metadata import extract_logistics_metadata
+
 
 CHINESE_NUMERAL = "一二三四五六七八九十百千万"
 
@@ -285,7 +287,7 @@ def _markdown_table_to_chunks(
             for cell_index, header in enumerate(headers)
             if header and cell_index < len(cells) and cells[cell_index]
         ]
-        row_id = f"table-{table_index}-row-{row_index}"
+        row_id = _stable_table_row_id(section, table_name, row_pairs, row_index)
         text = normalize_text(
             "\n".join(
                 [
@@ -325,6 +327,74 @@ def _markdown_table_cells(line: str) -> list[str]:
 
 def _is_markdown_list_item(line: str) -> bool:
     return bool(re.match(r"^([-*+]|\d+[.)])\s+\S", line))
+
+
+def _stable_table_row_id(section: _Section, table_name: str, row_pairs: list[str], row_index: int) -> str:
+    row_text = "\n".join([_section_path(section), table_name, *row_pairs])
+    metadata = extract_logistics_metadata(row_text)
+    parts: list[str] = []
+    country = str(metadata.get("country", "")).strip().lower()
+    if country:
+        parts.append(country)
+    elif metadata.get("region"):
+        parts.append(_slug_text(str(metadata["region"])))
+
+    incoterm = str(metadata.get("incoterm", "")).strip().lower()
+    channel = str(metadata.get("channel", "")).strip().lower()
+    if incoterm:
+        parts.append(incoterm)
+    elif channel:
+        parts.append(_slug_text(channel))
+
+    category = str(metadata.get("product_category", ""))
+    fee_slug = _fee_slug(row_text)
+    if category:
+        parts.append(_category_slug(category))
+    elif fee_slug:
+        parts.append(fee_slug)
+
+    if len(parts) >= 2:
+        return "row-" + "-".join(item for item in parts if item)
+    return f"table-{_slug_text(table_name) or 'table'}-row-{row_index}"
+
+
+def _category_slug(category: str) -> str:
+    mapping = {
+        "带电": "battery",
+        "纯电池": "battery",
+        "液体": "liquid",
+        "粉末": "powder",
+        "食品": "food",
+        "化妆品": "cosmetics",
+        "纺织品": "textile",
+        "普货": "general",
+    }
+    return mapping.get(category, _slug_text(category))
+
+
+def _fee_slug(text: str) -> str:
+    if "偏远附加费" in text or "偏远" in text:
+        return "remote-fee"
+    if "燃油" in text:
+        return "fuel-fee"
+    if "超重" in text:
+        return "overweight-fee"
+    return ""
+
+
+def _slug_text(text: str) -> str:
+    ascii_text = re.sub(r"[^a-zA-Z0-9]+", "-", text.lower()).strip("-")
+    if ascii_text:
+        return ascii_text
+    mapping = {
+        "欧盟": "eu",
+        "欧洲": "eu",
+        "北美": "north-america",
+    }
+    for key, value in mapping.items():
+        if key in text:
+            return value
+    return ""
 
 
 def _section_text_with_context(section: _Section) -> str:

@@ -11,8 +11,14 @@ from ..models import RetrievalResult, RetrievalSettings
 from ..repositories import DocumentRepository
 from ..vector_store import VectorStore
 from .embeddings import EmbeddingService
+from .logistics_metadata import extract_logistics_metadata
 from .runtime_retrieval import RuntimeRetrievalService
 from .text import normalize_text, tokenize
+
+
+MAX_CONTEXT_PER_HIT = 3
+MAX_SAME_SECTION_CONTEXT_PER_HIT = 2
+MAX_ADJACENT_CONTEXT_PER_HIT = 1
 
 
 @dataclass(frozen=True)
@@ -290,6 +296,7 @@ class RetrievalService:
         query_counter = Counter(query_tokens)
         query_ngrams = self._char_ngrams(normalized_query)
         query_embedding = self.embeddings.embed_text(normalized_query) if self.embeddings.is_enabled() else []
+        query_metadata = extract_logistics_metadata(query)
 
         keyword_weight, semantic_weight = self._normalize_pair(
             settings.keyword_weight,
@@ -334,6 +341,9 @@ class RetrievalService:
                 semantic_score = min(1.0, semantic_cosine * 0.72 + token_jaccard * 0.28)
 
             hybrid_score = keyword_score * keyword_weight + semantic_score * semantic_weight
+            metadata_score = self._metadata_match_score(query_metadata, chunk.metadata)
+            if metadata_score:
+                hybrid_score = min(1.0, hybrid_score + metadata_score * 0.16)
             filter_reason = "candidate"
             if hybrid_score < settings.min_score and exact_phrase_bonus == 0.0:
                 filter_reason = "below_min_score"
@@ -346,6 +356,7 @@ class RetrievalService:
                     "semantic_source": semantic_source,
                     "hybrid_score": round(hybrid_score, 4),
                     "coverage_score": round(coverage, 4),
+                    "metadata_score": round(metadata_score, 4),
                     "title_bonus": round(title_bonus, 4),
                     "phrase_bonus": round(exact_phrase_bonus, 4),
                     "filter_reason": filter_reason,
@@ -357,6 +368,7 @@ class RetrievalService:
                 float(item["hybrid_score"]),
                 float(item["coverage_score"]),
                 float(item["keyword_score"]),
+                float(item["metadata_score"]),
             ),
             reverse=True,
         )
@@ -463,6 +475,7 @@ class RetrievalService:
             keyword_score = float(item["keyword_score"])
             semantic_score = float(item["semantic_score"])
             semantic_source = str(item["semantic_source"])
+            metadata_score = float(item.get("metadata_score", 0.0))
             title_bonus = float(item["title_bonus"])
             phrase_bonus = float(item["phrase_bonus"])
 
@@ -474,6 +487,7 @@ class RetrievalService:
                     + coverage_score * 0.2
                     + keyword_score * 0.18
                     + semantic_score * 0.12
+                    + metadata_score * 0.1
                     + title_bonus * 0.08
                     + phrase_bonus * 0.07
                 )
@@ -523,6 +537,8 @@ class RetrievalService:
                         "expansion_reason": "",
                         "score_inherited": False,
                         "score_note": "",
+                        "hit_rank": len(hit_results) + 1,
+                        "context_rank": 0,
                     }
                 )
             )
@@ -542,11 +558,32 @@ class RetrievalService:
         for result in hit_results:
             add_result(result)
 
+        context_rank = 0
+        max_context_total = hit_limit
         for result in hit_results:
+            per_hit_context = 0
             for section_result in self._same_section_chunk_results(result):
-                add_result(section_result)
+                if context_rank >= max_context_total or per_hit_context >= MAX_SAME_SECTION_CONTEXT_PER_HIT:
+                    break
+                before = len(expanded)
+                add_result(section_result.model_copy(update={"context_rank": context_rank + 1}))
+                if len(expanded) > before:
+                    context_rank += 1
+                    per_hit_context += 1
             for adjacent in self._adjacent_chunk_results(result):
-                add_result(adjacent)
+                if (
+                    context_rank >= max_context_total
+                    or per_hit_context >= MAX_CONTEXT_PER_HIT
+                    or per_hit_context >= MAX_SAME_SECTION_CONTEXT_PER_HIT + MAX_ADJACENT_CONTEXT_PER_HIT
+                ):
+                    break
+                before = len(expanded)
+                add_result(adjacent.model_copy(update={"context_rank": context_rank + 1}))
+                if len(expanded) > before:
+                    context_rank += 1
+                    per_hit_context += 1
+            if context_rank >= max_context_total:
+                break
 
         return expanded
 
@@ -711,6 +748,7 @@ class RetrievalService:
             "semantic_source": str(item["semantic_source"]),
             "rerank_score": 0.0,
             "coverage_score": float(item["coverage_score"]),
+            "metadata_score": float(item.get("metadata_score", 0.0)),
             "matched_query": variant.query,
             "query_variant": variant.label,
             "query_boost": variant.boost,
@@ -721,6 +759,8 @@ class RetrievalService:
             "expansion_reason": "",
             "score_inherited": False,
             "score_note": "",
+            "hit_rank": None,
+            "context_rank": None,
             "filter_reason": filter_reason,
             "rank": None,
             "metadata": dict(chunk.metadata),
@@ -753,8 +793,10 @@ class RetrievalService:
             "expansion_reason": item.expansion_reason,
             "score_inherited": item.score_inherited,
             "score_note": item.score_note,
-            "filter_reason": filter_reason,
-            "rank": rank,
+            "filter_reason": "context_expansion" if item.result_type == "context" else filter_reason,
+            "rank": item.context_rank if item.result_type == "context" else item.hit_rank or rank,
+            "hit_rank": item.hit_rank or None,
+            "context_rank": item.context_rank or None,
             "metadata": dict(item.metadata),
             "section_path": item.metadata.get("section_path", ""),
         }
@@ -774,6 +816,32 @@ class RetrievalService:
     @staticmethod
     def _result_signature(item: RetrievalResult) -> str:
         return normalize_text(item.text)[:180].lower()
+
+    @staticmethod
+    def _metadata_match_score(query_metadata: dict[str, Any], chunk_metadata: dict[str, Any]) -> float:
+        if not query_metadata or not chunk_metadata:
+            return 0.0
+        weights = {
+            "country": 0.28,
+            "region": 0.14,
+            "channel": 0.16,
+            "incoterm": 0.18,
+            "product_category": 0.18,
+            "doc_type": 0.06,
+        }
+        score = 0.0
+        total = 0.0
+        for key, weight in weights.items():
+            query_value = str(query_metadata.get(key, "")).strip().lower()
+            if not query_value:
+                continue
+            total += weight
+            chunk_value = str(chunk_metadata.get(key, "")).strip().lower()
+            if chunk_value and query_value == chunk_value:
+                score += weight
+        if total <= 0:
+            return 0.0
+        return score / total
 
     @staticmethod
     def _char_ngrams(text: str, min_n: int = 2, max_n: int = 3) -> Counter[str]:

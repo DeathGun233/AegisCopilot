@@ -869,5 +869,10 @@ def get_task(
 def run_evaluation(current_user: User = Depends(get_current_user)) -> EvaluationResponse:
     _require_admin(current_user)
     container = get_container()
-    service = EvaluationService(container.agent_service, container.conversations, current_user.id)
+    service = EvaluationService(
+        container.agent_service,
+        container.conversations,
+        current_user.id,
+        retrieval=container.retrieval_service,
+    )
     return EvaluationResponse(run=service.run())

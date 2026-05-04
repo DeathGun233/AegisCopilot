@@ -5,13 +5,14 @@
     "expected_answer": "需要 MSDS、UN38.3、运输鉴定书；纯电池不接，内置电池需单独确认。",
     "expected_documents": ["欧洲 DDP 渠道清关资料表"],
     "expected_sections": ["德国 > 带电产品"],
-    "expected_table_rows": ["row-germany-battery"],
+    "expected_table_rows": ["row-de-ddp-battery"],
     "expected_keywords": ["MSDS", "UN38.3", "运输鉴定书", "纯电池不接"],
     "country": "DE",
     "region": "EU",
     "channel": "DDP空派",
     "incoterm": "DDP",
     "product_category": "带电",
+    "effective_date": "2026-05-01",
     "query_type": "customs_requirement",
     "doc_type": "customs_rule",
     "negative": false
@@ -29,6 +30,7 @@
     "channel": "FBA",
     "query_type": "fee_table_lookup",
     "doc_type": "price_table",
+    "effective_date": "2026-05-01",
     "negative": false
   },
   {

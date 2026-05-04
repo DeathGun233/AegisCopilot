@@ -135,6 +135,8 @@ class RetrievalResult(BaseModel):
     expansion_reason: str = ""
     score_inherited: bool = False
     score_note: str = ""
+    hit_rank: int = 0
+    context_rank: int = 0
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -243,6 +245,8 @@ class EvaluationRun(BaseModel):
     precision_at_k: float = 0.0
     mrr: float = 0.0
     citation_accuracy: float = 0.0
+    retrieval_citation_accuracy: float = 0.0
+    answer_citation_accuracy: float = 0.0
     no_answer_accuracy: float = 0.0
     table_exact_match: float = 0.0
     version_accuracy: float = 0.0

@@ -15,7 +15,12 @@ from app.services.evaluation import EvaluationService  # noqa: E402
 def main() -> None:
     seed_data()
     container = get_container()
-    run = EvaluationService(container.agent_service, container.conversations, owner_id="admin").run()
+    run = EvaluationService(
+        container.agent_service,
+        container.conversations,
+        owner_id="admin",
+        retrieval=container.retrieval_service,
+    ).run()
     output_path = ROOT / "evaluation" / "latest_report.json"
     output_path.write_text(run.model_dump_json(indent=2), encoding="utf-8")
     print(json.dumps(run.model_dump(), ensure_ascii=False, indent=2))

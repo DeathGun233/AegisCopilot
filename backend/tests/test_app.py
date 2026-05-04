@@ -495,6 +495,27 @@ def test_seed_skips_indexing_when_milvus_embeddings_are_unavailable(monkeypatch:
     assert fake_document_service.indexed == []
 
 
+def test_seed_contains_logistics_documents_required_by_eval_dataset() -> None:
+    from app import seed
+    from app.models import EvaluationCase
+
+    dataset_path = Path(__file__).resolve().parents[2] / "evaluation" / "logistics_qa.json"
+    cases = [EvaluationCase(**item) for item in json.loads(dataset_path.read_text(encoding="utf-8"))]
+    seed_documents = {item["title"]: item["content"] for item in seed.SAMPLE_DOCS}
+
+    for title in ("欧洲 DDP 渠道清关资料表", "美国 FBA 附加费表", "欧盟 VAT 申报规则"):
+        assert title in seed_documents
+
+    combined_seed_text = "\n".join(f"{title}\n{content}" for title, content in seed_documents.items())
+    for case in cases:
+        for expected_document in case.expected_documents:
+            assert expected_document in seed_documents
+        for expected_section in case.expected_sections:
+            assert all(part.strip() in combined_seed_text for part in expected_section.split(">"))
+        for keyword in case.expected_keywords:
+            assert keyword in combined_seed_text
+
+
 def test_non_demo_environment_rejects_default_passwords(client: TestClient) -> None:
     original = _with_auth_settings(
         allow_demo_auth=False,

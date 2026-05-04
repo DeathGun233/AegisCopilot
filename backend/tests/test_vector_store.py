@@ -210,6 +210,64 @@ def test_retrieval_context_expansion_does_not_consume_top_k_hits(tmp_path: Path)
     assert "inherited" in context_results[0].score_note.lower()
 
 
+def test_retrieval_limits_context_expansion_budget_and_reports_context_ranks(tmp_path: Path) -> None:
+    from app.services.retrieval import RetrievalService
+
+    hit = Chunk(
+        id="chunk-logistics-hit",
+        document_id="doc-logistics",
+        document_title="Europe DDP Customs Rules",
+        text="Germany DDP battery products require MSDS and UN38.3 certificates.",
+        chunk_index=0,
+        tokens=["germany", "ddp", "battery", "products", "msds", "un38", "3"],
+        embedding=[],
+        embedding_version="",
+        metadata={"section_path": "Germany > Battery Products"},
+    )
+    context_chunks = [
+        Chunk(
+            id=f"chunk-logistics-context-{index}",
+            document_id="doc-logistics",
+            document_title="Europe DDP Customs Rules",
+            text=f"Germany DDP battery context line {index}.",
+            chunk_index=index,
+            tokens=["germany", "ddp", "battery", "context", str(index)],
+            embedding=[],
+            embedding_version="",
+            metadata={"section_path": "Germany > Battery Products"},
+        )
+        for index in range(1, 8)
+    ]
+    service = RetrievalService(
+        repo=RejectingDocumentRepository(),
+        vector_store=StaticVectorStore([hit, *context_chunks], search_chunks=[hit]),
+        runtime_retrieval=RuntimeRetrievalService(tmp_path / "runtime_retrieval.json"),
+        embeddings=DisabledEmbeddings(),
+    )
+
+    results = service.search("Germany DDP battery MSDS", top_k=1)
+    contexts = [item for item in results if item.result_type == "context"]
+
+    assert len(contexts) <= 1
+    assert results[0].hit_rank == 1
+    assert contexts[0].context_rank == 1
+
+    debug = service.debug_search(
+        "Germany DDP battery MSDS",
+        top_k=1,
+        candidate_k=3,
+        keyword_weight=1.0,
+        semantic_weight=0.0,
+        min_score=0.0,
+    )
+    debug_contexts = [item for item in debug["results"] if item["result_type"] == "context"]
+
+    assert len(debug_contexts) <= 1
+    assert debug["results"][0]["hit_rank"] == 1
+    assert debug_contexts[0]["filter_reason"] == "context_expansion"
+    assert debug_contexts[0]["context_rank"] == 1
+
+
 def test_retrieval_expands_same_section_children_for_parent_heading_hits(tmp_path: Path) -> None:
     from app.services.retrieval import RetrievalService
 
@@ -523,6 +581,67 @@ def test_retrieval_keyword_candidates_are_ranked_by_bm25(tmp_path: Path) -> None
     results = service.search("单独考试报考条件", top_k=1)
 
     assert [item.chunk_id for item in results if item.result_type == "hit"] == ["chunk-single-exam"]
+
+
+def test_retrieval_soft_boosts_logistics_metadata_matches(tmp_path: Path) -> None:
+    from app.services.retrieval import RetrievalService
+
+    france_liquid = Chunk(
+        id="chunk-fr-liquid",
+        document_id="doc-eu",
+        document_title="欧洲 DDP 渠道清关资料表",
+        text="欧洲 DDP 渠道清关资料要求。",
+        chunk_index=0,
+        tokens=["欧洲", "ddp", "渠道", "清关", "资料", "要求"],
+        embedding=[],
+        embedding_version="",
+        metadata={
+            "country": "FR",
+            "region": "EU",
+            "incoterm": "DDP",
+            "product_category": "液体",
+            "doc_type": "customs_rule",
+        },
+    )
+    germany_battery = Chunk(
+        id="chunk-de-battery",
+        document_id="doc-eu",
+        document_title="欧洲 DDP 渠道清关资料表",
+        text="欧洲 DDP 渠道清关资料要求。",
+        chunk_index=1,
+        tokens=["欧洲", "ddp", "渠道", "清关", "资料", "要求"],
+        embedding=[],
+        embedding_version="",
+        metadata={
+            "country": "DE",
+            "region": "EU",
+            "incoterm": "DDP",
+            "product_category": "带电",
+            "doc_type": "customs_rule",
+        },
+    )
+    generic_europe = Chunk(
+        id="chunk-eu-generic",
+        document_id="doc-eu",
+        document_title="欧洲渠道规则",
+        text="欧洲 DDP 渠道清关资料要求。",
+        chunk_index=2,
+        tokens=["欧洲", "ddp", "渠道", "清关", "资料", "要求"],
+        embedding=[],
+        embedding_version="",
+        metadata={"region": "EU", "doc_type": "customs_rule"},
+    )
+    service = RetrievalService(
+        repo=RejectingDocumentRepository(),
+        vector_store=StaticVectorStore([france_liquid, germany_battery, generic_europe]),
+        runtime_retrieval=RuntimeRetrievalService(tmp_path / "runtime_retrieval.json"),
+        embeddings=DisabledEmbeddings(),
+    )
+
+    results = service.search("德国 DDP 带电产品清关资料", top_k=3)
+    hit_ids = [item.chunk_id for item in results if item.result_type == "hit"]
+
+    assert hit_ids[0] == "chunk-de-battery"
 
 
 def test_local_vector_store_delegates_to_existing_chunk_storage() -> None:
