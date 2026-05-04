@@ -34,6 +34,7 @@ from .services.embeddings import EmbeddingService
 from .services.extraction import ExtractionService
 from .services.generation_service import GenerationService
 from .services.query_understanding import QueryUnderstandingService
+from .services.rerank import RerankService
 from .services.retrieval import RetrievalService
 from .services.runtime_models import RuntimeModelService
 from .services.runtime_retrieval import RuntimeRetrievalService
@@ -83,6 +84,7 @@ class Container:
             self.runtime_model_service = RuntimeModelService(storage / "runtime_model.json")
         self.vector_store = self._build_vector_store()
         self.embedding_service = EmbeddingService()
+        self.rerank_service = RerankService.from_settings(settings)
         self.document_service = DocumentService(
             self.documents,
             self.document_tasks,
@@ -95,6 +97,7 @@ class Container:
             self.vector_store,
             self.runtime_retrieval_service,
             self.embedding_service,
+            reranker=self.rerank_service,
         )
         self.query_understanding_service = QueryUnderstandingService()
         self.tool_service = ToolService(self.retrieval_service)

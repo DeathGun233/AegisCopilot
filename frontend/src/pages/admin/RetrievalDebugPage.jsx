@@ -72,6 +72,13 @@ function resultRankLabel(item) {
   return `Hit #${item.hit_rank || item.rank || "-"}`;
 }
 
+function rerankLabel(item) {
+  const source = item.rerank_source || "heuristic";
+  const model = item.rerank_model ? ` / ${item.rerank_model}` : "";
+  const fallback = item.rerank_error ? ` / fallback: ${item.rerank_error}` : "";
+  return `rerank ${source}${model}${fallback}`;
+}
+
 function ConfigFields({ config, onChange }) {
   return (
     <div className="definition-list">
@@ -197,6 +204,7 @@ function DebugColumn({ title, debug }) {
                     总分 {item.score} / 关键词 {item.keyword_score} / 语义 {item.semantic_score} / 重排{" "}
                     {item.rerank_score}
                   </small>
+                  <small>{rerankLabel(item)}</small>
                   <small>
                     {item.semantic_source} / {item.query_variant} / {item.matched_query || "-"}
                   </small>

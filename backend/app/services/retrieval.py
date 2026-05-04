@@ -12,6 +12,7 @@ from ..repositories import DocumentRepository
 from ..vector_store import VectorStore
 from .embeddings import EmbeddingService
 from .logistics_metadata import extract_logistics_metadata
+from .rerank import RerankService
 from .runtime_retrieval import RuntimeRetrievalService
 from .text import normalize_text, tokenize
 
@@ -123,11 +124,13 @@ class RetrievalService:
         vector_store: VectorStore,
         runtime_retrieval: RuntimeRetrievalService,
         embeddings: EmbeddingService,
+        reranker: RerankService | None = None,
     ) -> None:
         self.repo = repo
         self.vector_store = vector_store
         self.runtime_retrieval = runtime_retrieval
         self.embeddings = embeddings
+        self.reranker = reranker or RerankService()
         self._keyword_index_signature: tuple[tuple[str, int, int, str], ...] | None = None
         self._keyword_index: BM25KeywordIndex | None = None
 
@@ -174,7 +177,7 @@ class RetrievalService:
             if item["filter_reason"] == "candidate"
         ]
         shortlist = candidates[: settings.candidate_k]
-        reranked = self._rerank(shortlist, settings.rerank_weight)
+        reranked = self.reranker.rerank(query, shortlist, settings.rerank_weight)
         deduped = self._dedupe_results(reranked)
         return deduped[:limit]
 
@@ -226,7 +229,7 @@ class RetrievalService:
             for item in outside_candidate_k:
                 debug_candidates.append(self._debug_item_from_scored(item, variant, "outside_candidate_k"))
 
-            for item in self._rerank(shortlist, settings.rerank_weight):
+            for item in self.reranker.rerank(variant.query, shortlist, settings.rerank_weight):
                 final_score = round(min(1.0, item.score * variant.boost), 4)
                 updated = item.model_copy(
                     update={
@@ -466,61 +469,7 @@ class RetrievalService:
         return variants
 
     def _rerank(self, candidates: list[dict[str, object]], rerank_weight: float) -> list[RetrievalResult]:
-        rerank_factor = min(max(rerank_weight, 0.0), 1.0)
-        reranked: list[RetrievalResult] = []
-        for index, item in enumerate(candidates):
-            chunk = item["chunk"]
-            hybrid_score = float(item["hybrid_score"])
-            coverage_score = float(item["coverage_score"])
-            keyword_score = float(item["keyword_score"])
-            semantic_score = float(item["semantic_score"])
-            semantic_source = str(item["semantic_source"])
-            metadata_score = float(item.get("metadata_score", 0.0))
-            title_bonus = float(item["title_bonus"])
-            phrase_bonus = float(item["phrase_bonus"])
-
-            rerank_score = min(
-                1.0,
-                hybrid_score * (1 - rerank_factor)
-                + (
-                    hybrid_score * 0.35
-                    + coverage_score * 0.2
-                    + keyword_score * 0.18
-                    + semantic_score * 0.12
-                    + metadata_score * 0.1
-                    + title_bonus * 0.08
-                    + phrase_bonus * 0.07
-                )
-                * rerank_factor,
-            )
-
-            reranked.append(
-                RetrievalResult(
-                    chunk_id=chunk.id,
-                    document_id=chunk.document_id,
-                    document_title=chunk.document_title,
-                    text=chunk.text,
-                    score=round(rerank_score, 4),
-                    source=f"{chunk.document_title}#chunk-{chunk.chunk_index}",
-                    display_source=self._display_source(chunk),
-                    retrieval_method="hybrid",
-                    keyword_score=round(keyword_score, 4),
-                    semantic_score=round(semantic_score, 4),
-                    semantic_source=semantic_source,
-                    rerank_score=round(rerank_score, 4),
-                    coverage_score=round(coverage_score, 4),
-                    matched_query="",
-                    query_variant="primary",
-                    query_boost=1.0,
-                    metadata=dict(chunk.metadata),
-                )
-            )
-
-        reranked.sort(
-            key=lambda item: (item.rerank_score, item.keyword_score, item.semantic_score),
-            reverse=True,
-        )
-        return reranked
+        return self.reranker.rerank("", candidates, rerank_weight)
 
     def _expand_context_results(self, results: list[RetrievalResult], hit_limit: int) -> list[RetrievalResult]:
         hit_results: list[RetrievalResult] = []
@@ -620,6 +569,9 @@ class RetrievalService:
                     semantic_score=result.semantic_score,
                     semantic_source=result.semantic_source,
                     rerank_score=result.rerank_score,
+                    rerank_source=result.rerank_source,
+                    rerank_model=result.rerank_model,
+                    rerank_error=result.rerank_error,
                     coverage_score=result.coverage_score,
                     matched_query=result.matched_query,
                     query_variant=result.query_variant,
@@ -665,6 +617,9 @@ class RetrievalService:
                     semantic_score=result.semantic_score,
                     semantic_source=result.semantic_source,
                     rerank_score=result.rerank_score,
+                    rerank_source=result.rerank_source,
+                    rerank_model=result.rerank_model,
+                    rerank_error=result.rerank_error,
                     coverage_score=result.coverage_score,
                     matched_query=result.matched_query,
                     query_variant=result.query_variant,
@@ -747,6 +702,9 @@ class RetrievalService:
             "semantic_score": float(item["semantic_score"]),
             "semantic_source": str(item["semantic_source"]),
             "rerank_score": 0.0,
+            "rerank_source": "",
+            "rerank_model": "",
+            "rerank_error": "",
             "coverage_score": float(item["coverage_score"]),
             "metadata_score": float(item.get("metadata_score", 0.0)),
             "matched_query": variant.query,
@@ -782,6 +740,9 @@ class RetrievalService:
             "semantic_score": item.semantic_score,
             "semantic_source": item.semantic_source,
             "rerank_score": item.rerank_score,
+            "rerank_source": item.rerank_source,
+            "rerank_model": item.rerank_model,
+            "rerank_error": item.rerank_error,
             "coverage_score": item.coverage_score,
             "matched_query": item.matched_query,
             "query_variant": item.query_variant,

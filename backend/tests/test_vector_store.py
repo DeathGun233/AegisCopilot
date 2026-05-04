@@ -487,6 +487,58 @@ def test_retrieval_debug_reports_scores_variants_and_filter_reasons(tmp_path: Pa
     )
 
 
+def test_retrieval_debug_reports_rerank_source_and_model(tmp_path: Path) -> None:
+    from app.models import RetrievalResult
+    from app.services.retrieval import RetrievalService
+
+    class FakeReranker:
+        def rerank(self, query: str, candidates: list[dict[str, object]], rerank_weight: float):
+            chunk = candidates[0]["chunk"]
+            return [
+                RetrievalResult(
+                    chunk_id=chunk.id,
+                    document_id=chunk.document_id,
+                    document_title=chunk.document_title,
+                    text=chunk.text,
+                    score=0.92,
+                    source=f"{chunk.document_title}#chunk-{chunk.chunk_index}",
+                    display_source=f"{chunk.document_title} | chunk {chunk.chunk_index + 1}",
+                    keyword_score=float(candidates[0]["keyword_score"]),
+                    semantic_score=float(candidates[0]["semantic_score"]),
+                    semantic_source=str(candidates[0]["semantic_source"]),
+                    rerank_score=0.92,
+                    rerank_source="qwen",
+                    rerank_model="qwen3-vl-rerank",
+                    metadata=dict(chunk.metadata),
+                )
+            ]
+
+    chunk = Chunk(
+        id="chunk-debug-rerank",
+        document_id="doc-logistics",
+        document_title="Europe DDP Customs Rules",
+        text="Germany DDP battery products require MSDS and UN38.3 certificates.",
+        chunk_index=0,
+        tokens=["germany", "ddp", "battery", "products", "msds", "un38", "3"],
+        embedding=[],
+        embedding_version="",
+        metadata={"section_path": "Germany > Battery Products"},
+    )
+    service = RetrievalService(
+        repo=RejectingDocumentRepository(),
+        vector_store=StaticVectorStore([chunk]),
+        runtime_retrieval=RuntimeRetrievalService(tmp_path / "runtime_retrieval.json"),
+        embeddings=DisabledEmbeddings(),
+        reranker=FakeReranker(),
+    )
+
+    debug = service.debug_search("Germany DDP battery", top_k=1, candidate_k=1, min_score=0.0)
+
+    assert debug["results"][0]["rerank_source"] == "qwen"
+    assert debug["results"][0]["rerank_model"] == "qwen3-vl-rerank"
+    assert debug["results"][0]["rerank_error"] == ""
+
+
 def test_retrieval_debug_handles_empty_query(tmp_path: Path) -> None:
     from app.services.retrieval import RetrievalService
 

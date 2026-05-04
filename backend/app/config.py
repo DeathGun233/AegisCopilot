@@ -24,6 +24,10 @@ def _pick_embedding_api_key() -> str:
     return os.getenv("AEGIS_EMBEDDING_API_KEY") or _pick_api_key()
 
 
+def _pick_rerank_api_key() -> str:
+    return os.getenv("AEGIS_RERANK_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or _pick_api_key()
+
+
 class Settings(BaseModel):
     app_name: str = "AegisCopilot API"
     app_version: str = "0.1.0"
@@ -38,6 +42,15 @@ class Settings(BaseModel):
     default_rerank_weight: float = float(os.getenv("AEGIS_RERANK_WEIGHT", "0.6"))
     default_retrieval_min_score: float = float(os.getenv("AEGIS_RETRIEVAL_MIN_SCORE", "0.08"))
     min_grounding_score: float = float(os.getenv("AEGIS_MIN_GROUNDING_SCORE", "0.18"))
+    rerank_provider: str = os.getenv("AEGIS_RERANK_PROVIDER", "heuristic").strip().lower() or "heuristic"
+    rerank_model: str = os.getenv("AEGIS_RERANK_MODEL", "qwen3-vl-rerank")
+    rerank_base_url: str = os.getenv(
+        "AEGIS_RERANK_BASE_URL",
+        "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank",
+    )
+    rerank_api_key: str = _pick_rerank_api_key()
+    rerank_top_n: int = int(os.getenv("AEGIS_RERANK_TOP_N", "40"))
+    rerank_timeout_seconds: float = float(os.getenv("AEGIS_RERANK_TIMEOUT_SECONDS", "15"))
     llm_provider: str = os.getenv(
         "AEGIS_LLM_PROVIDER",
         "openai-compatible" if _pick_api_key() else "mock",

@@ -124,6 +124,9 @@ class RetrievalResult(BaseModel):
     semantic_score: float = 0.0
     semantic_source: str = "heuristic"
     rerank_score: float = 0.0
+    rerank_source: str = "heuristic"
+    rerank_model: str = ""
+    rerank_error: str = ""
     coverage_score: float = 0.0
     matched_query: str = ""
     query_variant: str = "primary"
