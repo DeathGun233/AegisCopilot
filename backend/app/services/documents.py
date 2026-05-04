@@ -15,6 +15,7 @@ from ..models import (
 from ..repositories import DocumentRepository, DocumentTaskRepository
 from ..vector_store import VectorStore
 from .embeddings import EmbeddingService
+from .logistics_metadata import extract_logistics_metadata
 from .text import normalize_text, split_into_structured_chunks, tokenize
 
 
@@ -382,12 +383,15 @@ class DocumentService:
                 tokens=tokenize(chunk_text),
                 embedding=vectors[index] if index < len(vectors) else [],
                 embedding_version=embedding_version if index < len(vectors) else "",
-                metadata={
+                metadata=extract_logistics_metadata(
+                    f"{document.title}\n{chunk_text}",
+                    base_metadata={
                     "department": document.department,
                     "version": document.version,
                     "tags": document.tags,
                     **structured_chunks[index].metadata,
-                },
+                    },
+                ),
             )
             for index, chunk_text in enumerate(chunk_texts)
         ]

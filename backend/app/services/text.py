@@ -146,6 +146,12 @@ def _match_section_heading(line: str) -> tuple[int, str, str] | None:
     if len(line) > 120:
         return None
 
+    markdown_heading = re.match(r"^(?P<marker>#{1,6})\s+(?P<title>.+?)\s*#*$", line)
+    if markdown_heading:
+        title = markdown_heading.group("title").strip()
+        if title:
+            return len(markdown_heading.group("marker")), "", title
+
     patterns: list[tuple[int, str]] = [
         (1, rf"^(?P<marker>[{CHINESE_NUMERAL}]+[、.．])\s*(?P<title>.+)$"),
         (1, rf"^(?P<marker>第[0-9{CHINESE_NUMERAL}]+条)\s*(?P<title>.+)$"),
@@ -179,6 +185,19 @@ def _section_to_chunks(section: _Section, *, chunk_size: int, overlap: int) -> l
             chunks.extend(_section_to_chunks(child, chunk_size=chunk_size, overlap=overlap))
         return chunks
 
+    if section.children and not section.marker and not normalize_text("\n".join(section.content_lines)):
+        chunks: list[StructuredTextChunk] = []
+        for child in section.children:
+            chunks.extend(_section_to_chunks(child, chunk_size=chunk_size, overlap=overlap))
+        return chunks
+
+    block_chunks = _section_content_block_chunks(section, chunk_size=chunk_size, overlap=overlap)
+    if block_chunks:
+        if section.children:
+            for child in section.children:
+                block_chunks.extend(_section_to_chunks(child, chunk_size=chunk_size, overlap=overlap))
+        return block_chunks
+
     section_text = _section_text_with_context(section)
     return _chunk_section_text(
         text=section_text,
@@ -186,6 +205,126 @@ def _section_to_chunks(section: _Section, *, chunk_size: int, overlap: int) -> l
         chunk_size=chunk_size,
         overlap=overlap,
     )
+
+
+def _section_content_block_chunks(section: _Section, *, chunk_size: int, overlap: int) -> list[StructuredTextChunk]:
+    metadata = _section_metadata(section)
+    lines = list(section.content_lines)
+    chunks: list[StructuredTextChunk] = []
+    paragraph: list[str] = []
+    index = 0
+    table_count = 0
+
+    def flush_paragraph() -> None:
+        paragraph_text = normalize_text("\n".join(paragraph))
+        if not paragraph_text:
+            paragraph.clear()
+            return
+        chunks.extend(
+            _chunk_section_text(
+                text=normalize_text(f"{_section_path(section)}\n{paragraph_text}"),
+                metadata={**metadata, "block_type": "paragraph"},
+                chunk_size=chunk_size,
+                overlap=overlap,
+            )
+        )
+        paragraph.clear()
+
+    while index < len(lines):
+        line = lines[index].strip()
+        if _is_markdown_table_row(line):
+            flush_paragraph()
+            table_lines: list[str] = []
+            while index < len(lines) and _is_markdown_table_row(lines[index].strip()):
+                table_lines.append(lines[index].strip())
+                index += 1
+            table_count += 1
+            chunks.extend(_markdown_table_to_chunks(table_lines, section, metadata, table_count))
+            continue
+        if _is_markdown_list_item(line):
+            flush_paragraph()
+            list_lines: list[str] = []
+            while index < len(lines) and _is_markdown_list_item(lines[index].strip()):
+                list_lines.append(lines[index].strip())
+                index += 1
+            list_text = normalize_text(f"{_section_path(section)}\n" + "\n".join(list_lines))
+            chunks.append(
+                StructuredTextChunk(
+                    text=list_text,
+                    metadata={**metadata, "block_type": "list"},
+                )
+            )
+            continue
+        paragraph.append(lines[index])
+        index += 1
+
+    flush_paragraph()
+    return chunks
+
+
+def _markdown_table_to_chunks(
+    table_lines: list[str],
+    section: _Section,
+    metadata: dict[str, Any],
+    table_index: int,
+) -> list[StructuredTextChunk]:
+    if len(table_lines) < 2:
+        return []
+    headers = _markdown_table_cells(table_lines[0])
+    row_lines = table_lines[1:]
+    if row_lines and _is_markdown_table_separator(row_lines[0]):
+        row_lines = row_lines[1:]
+    table_name = section.title or _section_path(section) or f"table-{table_index}"
+    chunks: list[StructuredTextChunk] = []
+    for row_index, row_line in enumerate(row_lines, start=1):
+        cells = _markdown_table_cells(row_line)
+        if not cells:
+            continue
+        row_pairs = [
+            f"{header}：{cells[cell_index]}"
+            for cell_index, header in enumerate(headers)
+            if header and cell_index < len(cells) and cells[cell_index]
+        ]
+        row_id = f"table-{table_index}-row-{row_index}"
+        text = normalize_text(
+            "\n".join(
+                [
+                    f"章节：{_section_path(section)}",
+                    f"表格：{table_name}",
+                    *row_pairs,
+                ]
+            )
+        )
+        chunks.append(
+            StructuredTextChunk(
+                text=text,
+                metadata={
+                    **metadata,
+                    "block_type": "table_row",
+                    "table_name": table_name,
+                    "row_id": row_id,
+                    "table_row_index": row_index,
+                },
+            )
+        )
+    return chunks
+
+
+def _is_markdown_table_row(line: str) -> bool:
+    return line.startswith("|") and line.endswith("|") and line.count("|") >= 2
+
+
+def _is_markdown_table_separator(line: str) -> bool:
+    cells = _markdown_table_cells(line)
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell.strip()) for cell in cells)
+
+
+def _markdown_table_cells(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def _is_markdown_list_item(line: str) -> bool:
+    return bool(re.match(r"^([-*+]|\d+[.)])\s+\S", line))
 
 
 def _section_text_with_context(section: _Section) -> str:

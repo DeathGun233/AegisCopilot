@@ -31,6 +31,11 @@ const filterLabels = {
   candidate: "候选",
 };
 
+const resultTypeLabels = {
+  hit: "Hit",
+  context: "Context",
+};
+
 function numberValue(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -164,11 +169,21 @@ function DebugColumn({ title, debug }) {
           <div className="chunk-list">
             {debug.results?.length ? (
               debug.results.map((item) => (
-                <article key={`${title}-${item.chunk_id}-${item.query_variant}`} className="chunk-card">
+                <article
+                  key={`${title}-${item.chunk_id}-${item.query_variant}-${item.result_type || "hit"}`}
+                  className={`chunk-card ${item.result_type === "context" ? "context-expansion" : ""}`}
+                >
                   <strong>
-                    #{item.rank} {item.display_source || item.source}
+                    #{item.rank} {item.display_source || item.source} ·{" "}
+                    {resultTypeLabels[item.result_type || "hit"] || item.result_type}
                   </strong>
                   {sectionPath(item) ? <small>章节 {sectionPath(item)}</small> : null}
+                  {item.result_type === "context" ? (
+                    <small>
+                      {item.expansion_reason || "context"} / parent {item.parent_chunk_id || "-"} /{" "}
+                      {item.score_inherited ? "score inherited" : "score independent"}
+                    </small>
+                  ) : null}
                   <p>{truncate(item.text, 150)}</p>
                   <small>
                     总分 {item.score} / 关键词 {item.keyword_score} / 语义 {item.semantic_score} / 重排{" "}
@@ -177,6 +192,7 @@ function DebugColumn({ title, debug }) {
                   <small>
                     {item.semantic_source} / {item.query_variant} / {item.matched_query || "-"}
                   </small>
+                  {item.score_note ? <small>{item.score_note}</small> : null}
                 </article>
               ))
             ) : (

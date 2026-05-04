@@ -150,6 +150,66 @@ def test_retrieval_expands_adjacent_chunks_for_section_heading_hits(tmp_path: Pa
     assert [item.chunk_id for item in results] == [heading.id, adjacent.id]
 
 
+def test_retrieval_context_expansion_does_not_consume_top_k_hits(tmp_path: Path) -> None:
+    from app.services.retrieval import RetrievalService
+
+    first_hit = Chunk(
+        id="chunk-logistics-hit-1",
+        document_id="doc-logistics",
+        document_title="Europe DDP Customs Rules",
+        text="Germany DDP battery products require MSDS and UN38.3 certificates.",
+        chunk_index=0,
+        tokens=["germany", "ddp", "battery", "products", "require", "msds", "un38", "3"],
+        embedding=[],
+        embedding_version="",
+        metadata={"section_path": "Germany > Battery Products"},
+    )
+    first_context = Chunk(
+        id="chunk-logistics-context-1",
+        document_id="doc-logistics",
+        document_title="Europe DDP Customs Rules",
+        text="Pure batteries are not accepted; built-in batteries require confirmation.",
+        chunk_index=1,
+        tokens=["pure", "batteries", "not", "accepted", "built", "in", "confirmation"],
+        embedding=[],
+        embedding_version="",
+        metadata={"section_path": "Germany > Battery Products"},
+    )
+    second_hit = Chunk(
+        id="chunk-logistics-hit-2",
+        document_id="doc-logistics",
+        document_title="Europe DDP Customs Rules",
+        text="Germany DDP customs declaration value must match the commercial invoice.",
+        chunk_index=2,
+        tokens=["germany", "ddp", "customs", "declaration", "value", "commercial", "invoice"],
+        embedding=[],
+        embedding_version="",
+        metadata={"section_path": "Germany > Declaration Value"},
+    )
+    service = RetrievalService(
+        repo=RejectingDocumentRepository(),
+        vector_store=StaticVectorStore(
+            [first_hit, first_context, second_hit],
+            search_chunks=[first_hit, second_hit],
+        ),
+        runtime_retrieval=RuntimeRetrievalService(tmp_path / "runtime_retrieval.json"),
+        embeddings=DisabledEmbeddings(),
+    )
+
+    results = service.search("Germany DDP battery products MSDS UN38.3 customs invoice", top_k=2)
+    hit_results = [item for item in results if item.result_type == "hit"]
+    context_results = [item for item in results if item.result_type == "context"]
+
+    assert {item.chunk_id for item in hit_results} == {first_hit.id, second_hit.id}
+    assert [item.result_type for item in results[:2]] == ["hit", "hit"]
+    assert [item.chunk_id for item in context_results] == [first_context.id]
+    assert context_results[0].score_inherited is True
+    assert context_results[0].parent_chunk_id == first_hit.id
+    assert context_results[0].parent_result_id == first_hit.id
+    assert context_results[0].expansion_reason in {"same_section", "adjacent"}
+    assert "inherited" in context_results[0].score_note.lower()
+
+
 def test_retrieval_expands_same_section_children_for_parent_heading_hits(tmp_path: Path) -> None:
     from app.services.retrieval import RetrievalService
 
@@ -357,7 +417,9 @@ def test_retrieval_debug_reports_scores_variants_and_filter_reasons(tmp_path: Pa
     assert [item["label"] for item in debug["query_variants"]] == ["primary", "expand_1"]
     assert debug["settings"]["top_k"] == 1
     assert debug["settings"]["candidate_k"] == 4
-    assert [item["chunk_id"] for item in debug["results"]] == ["chunk-debug-primary"]
+    assert debug["results"][0]["chunk_id"] == "chunk-debug-primary"
+    assert debug["results"][0]["result_type"] == "hit"
+    assert all(item["result_type"] == "context" for item in debug["results"][1:])
     assert any(item["filter_reason"] == "selected" for item in debug["candidates"])
     assert any(item["filter_reason"] == "duplicate" for item in debug["candidates"])
     assert any(item["filter_reason"] == "below_min_score" for item in debug["candidates"])
@@ -460,7 +522,7 @@ def test_retrieval_keyword_candidates_are_ranked_by_bm25(tmp_path: Path) -> None
 
     results = service.search("单独考试报考条件", top_k=1)
 
-    assert [item.chunk_id for item in results] == ["chunk-single-exam"]
+    assert [item.chunk_id for item in results if item.result_type == "hit"] == ["chunk-single-exam"]
 
 
 def test_local_vector_store_delegates_to_existing_chunk_storage() -> None:

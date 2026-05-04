@@ -159,8 +159,7 @@ class RetrievalService:
             key=lambda item: (item.score, item.keyword_score, item.semantic_score, item.coverage_score),
             reverse=True,
         )
-        expanded = self._expand_context_results(deduped, final_top_k)
-        return expanded[:final_top_k]
+        return self._expand_context_results(deduped, final_top_k)
 
     def _search_single_query(self, query: str, settings, limit: int) -> list[RetrievalResult]:
         candidates = [
@@ -509,7 +508,27 @@ class RetrievalService:
         )
         return reranked
 
-    def _expand_context_results(self, results: list[RetrievalResult], limit: int) -> list[RetrievalResult]:
+    def _expand_context_results(self, results: list[RetrievalResult], hit_limit: int) -> list[RetrievalResult]:
+        hit_results: list[RetrievalResult] = []
+        for result in results:
+            if result.result_type == "context":
+                continue
+            hit_results.append(
+                result.model_copy(
+                    update={
+                        "result_type": "hit",
+                        "is_context_expansion": False,
+                        "parent_result_id": "",
+                        "parent_chunk_id": "",
+                        "expansion_reason": "",
+                        "score_inherited": False,
+                        "score_note": "",
+                    }
+                )
+            )
+            if len(hit_results) >= hit_limit:
+                break
+
         expanded: list[RetrievalResult] = []
         seen_signatures: set[str] = set()
 
@@ -520,22 +539,14 @@ class RetrievalService:
             seen_signatures.add(signature)
             expanded.append(item)
 
-        for result in results:
+        for result in hit_results:
             add_result(result)
-            if len(expanded) >= limit:
-                break
+
+        for result in hit_results:
             for section_result in self._same_section_chunk_results(result):
                 add_result(section_result)
-                if len(expanded) >= limit:
-                    break
-            if len(expanded) >= limit:
-                break
             for adjacent in self._adjacent_chunk_results(result):
                 add_result(adjacent)
-                if len(expanded) >= limit:
-                    break
-            if len(expanded) >= limit:
-                break
 
         return expanded
 
@@ -576,6 +587,13 @@ class RetrievalService:
                     matched_query=result.matched_query,
                     query_variant=result.query_variant,
                     query_boost=result.query_boost,
+                    result_type="context",
+                    is_context_expansion=True,
+                    parent_result_id=result.chunk_id,
+                    parent_chunk_id=result.chunk_id,
+                    expansion_reason="same_section",
+                    score_inherited=True,
+                    score_note="Context expansion result; scores are inherited from the parent hit with positional decay.",
                     metadata=dict(chunk.metadata),
                 )
             )
@@ -614,6 +632,13 @@ class RetrievalService:
                     matched_query=result.matched_query,
                     query_variant=result.query_variant,
                     query_boost=result.query_boost,
+                    result_type="context",
+                    is_context_expansion=True,
+                    parent_result_id=result.chunk_id,
+                    parent_chunk_id=result.chunk_id,
+                    expansion_reason="adjacent",
+                    score_inherited=True,
+                    score_note="Context expansion result; scores are inherited from the parent hit with positional decay.",
                     metadata=dict(chunk.metadata),
                 )
             )
@@ -657,7 +682,10 @@ class RetrievalService:
         parts = RetrievalService._section_path_parts(metadata)
         if not parts:
             return []
-        return parts[:1]
+        section_level = metadata.get("section_level")
+        if section_level == 1:
+            return parts[:1]
+        return parts
 
     @staticmethod
     def _chunk_index_from_result(result: RetrievalResult) -> int:
@@ -686,6 +714,13 @@ class RetrievalService:
             "matched_query": variant.query,
             "query_variant": variant.label,
             "query_boost": variant.boost,
+            "result_type": "hit",
+            "is_context_expansion": False,
+            "parent_result_id": "",
+            "parent_chunk_id": "",
+            "expansion_reason": "",
+            "score_inherited": False,
+            "score_note": "",
             "filter_reason": filter_reason,
             "rank": None,
             "metadata": dict(chunk.metadata),
@@ -711,6 +746,13 @@ class RetrievalService:
             "matched_query": item.matched_query,
             "query_variant": item.query_variant,
             "query_boost": item.query_boost,
+            "result_type": item.result_type,
+            "is_context_expansion": item.is_context_expansion,
+            "parent_result_id": item.parent_result_id,
+            "parent_chunk_id": item.parent_chunk_id,
+            "expansion_reason": item.expansion_reason,
+            "score_inherited": item.score_inherited,
+            "score_note": item.score_note,
             "filter_reason": filter_reason,
             "rank": rank,
             "metadata": dict(item.metadata),
