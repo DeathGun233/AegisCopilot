@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import hashlib
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Any
@@ -11,8 +12,15 @@ from ..models import RetrievalResult, RetrievalSettings
 from ..repositories import DocumentRepository
 from ..vector_store import VectorStore
 from .embeddings import EmbeddingService
+from .logistics_metadata import extract_logistics_metadata
+from .rerank import RerankService
 from .runtime_retrieval import RuntimeRetrievalService
 from .text import normalize_text, tokenize
+
+
+MAX_CONTEXT_PER_HIT = 3
+MAX_SAME_SECTION_CONTEXT_PER_HIT = 2
+MAX_ADJACENT_CONTEXT_PER_HIT = 1
 
 
 @dataclass(frozen=True)
@@ -117,11 +125,13 @@ class RetrievalService:
         vector_store: VectorStore,
         runtime_retrieval: RuntimeRetrievalService,
         embeddings: EmbeddingService,
+        reranker: RerankService | None = None,
     ) -> None:
         self.repo = repo
         self.vector_store = vector_store
         self.runtime_retrieval = runtime_retrieval
         self.embeddings = embeddings
+        self.reranker = reranker or RerankService()
         self._keyword_index_signature: tuple[tuple[str, int, int, str], ...] | None = None
         self._keyword_index: BM25KeywordIndex | None = None
 
@@ -159,8 +169,7 @@ class RetrievalService:
             key=lambda item: (item.score, item.keyword_score, item.semantic_score, item.coverage_score),
             reverse=True,
         )
-        expanded = self._expand_context_results(deduped, final_top_k)
-        return expanded[:final_top_k]
+        return self._expand_context_results(deduped, final_top_k)
 
     def _search_single_query(self, query: str, settings, limit: int) -> list[RetrievalResult]:
         candidates = [
@@ -169,7 +178,7 @@ class RetrievalService:
             if item["filter_reason"] == "candidate"
         ]
         shortlist = candidates[: settings.candidate_k]
-        reranked = self._rerank(shortlist, settings.rerank_weight)
+        reranked = self.reranker.rerank(query, shortlist, settings.rerank_weight)
         deduped = self._dedupe_results(reranked)
         return deduped[:limit]
 
@@ -221,7 +230,7 @@ class RetrievalService:
             for item in outside_candidate_k:
                 debug_candidates.append(self._debug_item_from_scored(item, variant, "outside_candidate_k"))
 
-            for item in self._rerank(shortlist, settings.rerank_weight):
+            for item in self.reranker.rerank(variant.query, shortlist, settings.rerank_weight):
                 final_score = round(min(1.0, item.score * variant.boost), 4)
                 updated = item.model_copy(
                     update={
@@ -237,7 +246,7 @@ class RetrievalService:
                 result_records.append(
                     {
                         "result": updated,
-                        "signature": f"{updated.document_id}:{normalize_text(updated.text)[:120].lower()}",
+                        "signature": self._result_signature(updated),
                         "variant_label": variant.label,
                     }
                 )
@@ -291,6 +300,7 @@ class RetrievalService:
         query_counter = Counter(query_tokens)
         query_ngrams = self._char_ngrams(normalized_query)
         query_embedding = self.embeddings.embed_text(normalized_query) if self.embeddings.is_enabled() else []
+        query_metadata = extract_logistics_metadata(query)
 
         keyword_weight, semantic_weight = self._normalize_pair(
             settings.keyword_weight,
@@ -335,6 +345,9 @@ class RetrievalService:
                 semantic_score = min(1.0, semantic_cosine * 0.72 + token_jaccard * 0.28)
 
             hybrid_score = keyword_score * keyword_weight + semantic_score * semantic_weight
+            metadata_score = self._metadata_match_score(query_metadata, chunk.metadata)
+            if metadata_score:
+                hybrid_score = min(1.0, hybrid_score + metadata_score * 0.16)
             filter_reason = "candidate"
             if hybrid_score < settings.min_score and exact_phrase_bonus == 0.0:
                 filter_reason = "below_min_score"
@@ -347,6 +360,7 @@ class RetrievalService:
                     "semantic_source": semantic_source,
                     "hybrid_score": round(hybrid_score, 4),
                     "coverage_score": round(coverage, 4),
+                    "metadata_score": round(metadata_score, 4),
                     "title_bonus": round(title_bonus, 4),
                     "phrase_bonus": round(exact_phrase_bonus, 4),
                     "filter_reason": filter_reason,
@@ -358,6 +372,7 @@ class RetrievalService:
                 float(item["hybrid_score"]),
                 float(item["coverage_score"]),
                 float(item["keyword_score"]),
+                float(item["metadata_score"]),
             ),
             reverse=True,
         )
@@ -455,61 +470,31 @@ class RetrievalService:
         return variants
 
     def _rerank(self, candidates: list[dict[str, object]], rerank_weight: float) -> list[RetrievalResult]:
-        rerank_factor = min(max(rerank_weight, 0.0), 1.0)
-        reranked: list[RetrievalResult] = []
-        for index, item in enumerate(candidates):
-            chunk = item["chunk"]
-            hybrid_score = float(item["hybrid_score"])
-            coverage_score = float(item["coverage_score"])
-            keyword_score = float(item["keyword_score"])
-            semantic_score = float(item["semantic_score"])
-            semantic_source = str(item["semantic_source"])
-            title_bonus = float(item["title_bonus"])
-            phrase_bonus = float(item["phrase_bonus"])
+        return self.reranker.rerank("", candidates, rerank_weight)
 
-            rerank_score = min(
-                1.0,
-                hybrid_score * (1 - rerank_factor)
-                + (
-                    hybrid_score * 0.35
-                    + coverage_score * 0.2
-                    + keyword_score * 0.18
-                    + semantic_score * 0.12
-                    + title_bonus * 0.08
-                    + phrase_bonus * 0.07
-                )
-                * rerank_factor,
-            )
-
-            reranked.append(
-                RetrievalResult(
-                    chunk_id=chunk.id,
-                    document_id=chunk.document_id,
-                    document_title=chunk.document_title,
-                    text=chunk.text,
-                    score=round(rerank_score, 4),
-                    source=f"{chunk.document_title}#chunk-{chunk.chunk_index}",
-                    display_source=self._display_source(chunk),
-                    retrieval_method="hybrid",
-                    keyword_score=round(keyword_score, 4),
-                    semantic_score=round(semantic_score, 4),
-                    semantic_source=semantic_source,
-                    rerank_score=round(rerank_score, 4),
-                    coverage_score=round(coverage_score, 4),
-                    matched_query="",
-                    query_variant="primary",
-                    query_boost=1.0,
-                    metadata=dict(chunk.metadata),
+    def _expand_context_results(self, results: list[RetrievalResult], hit_limit: int) -> list[RetrievalResult]:
+        hit_results: list[RetrievalResult] = []
+        for result in results:
+            if result.result_type == "context":
+                continue
+            hit_results.append(
+                result.model_copy(
+                    update={
+                        "result_type": "hit",
+                        "is_context_expansion": False,
+                        "parent_result_id": "",
+                        "parent_chunk_id": "",
+                        "expansion_reason": "",
+                        "score_inherited": False,
+                        "score_note": "",
+                        "hit_rank": len(hit_results) + 1,
+                        "context_rank": 0,
+                    }
                 )
             )
+            if len(hit_results) >= hit_limit:
+                break
 
-        reranked.sort(
-            key=lambda item: (item.rerank_score, item.keyword_score, item.semantic_score),
-            reverse=True,
-        )
-        return reranked
-
-    def _expand_context_results(self, results: list[RetrievalResult], limit: int) -> list[RetrievalResult]:
         expanded: list[RetrievalResult] = []
         seen_signatures: set[str] = set()
 
@@ -520,26 +505,43 @@ class RetrievalService:
             seen_signatures.add(signature)
             expanded.append(item)
 
-        for result in results:
+        for result in hit_results:
             add_result(result)
-            if len(expanded) >= limit:
-                break
+
+        context_rank = 0
+        max_context_total = hit_limit
+        for result in hit_results:
+            per_hit_context = 0
             for section_result in self._same_section_chunk_results(result):
-                add_result(section_result)
-                if len(expanded) >= limit:
+                if context_rank >= max_context_total or per_hit_context >= MAX_SAME_SECTION_CONTEXT_PER_HIT:
                     break
-            if len(expanded) >= limit:
-                break
+                before = len(expanded)
+                add_result(section_result.model_copy(update={"context_rank": context_rank + 1}))
+                if len(expanded) > before:
+                    context_rank += 1
+                    per_hit_context += 1
             for adjacent in self._adjacent_chunk_results(result):
-                add_result(adjacent)
-                if len(expanded) >= limit:
+                if (
+                    context_rank >= max_context_total
+                    or per_hit_context >= MAX_CONTEXT_PER_HIT
+                    or per_hit_context >= MAX_SAME_SECTION_CONTEXT_PER_HIT + MAX_ADJACENT_CONTEXT_PER_HIT
+                ):
                     break
-            if len(expanded) >= limit:
+                before = len(expanded)
+                add_result(adjacent.model_copy(update={"context_rank": context_rank + 1}))
+                if len(expanded) > before:
+                    context_rank += 1
+                    per_hit_context += 1
+            if context_rank >= max_context_total:
                 break
 
         return expanded
 
     def _same_section_chunk_results(self, result: RetrievalResult) -> list[RetrievalResult]:
+        child_results = self._child_chunk_results(result)
+        if child_results:
+            return child_results
+
         prefix = self._section_expansion_prefix(result.metadata)
         if not prefix:
             return []
@@ -558,28 +560,58 @@ class RetrievalService:
             parts = self._section_path_parts(chunk.metadata)
             if len(parts) < len(prefix) or parts[: len(prefix)] != prefix:
                 continue
-            section_results.append(
-                RetrievalResult(
-                    chunk_id=chunk.id,
-                    document_id=chunk.document_id,
-                    document_title=chunk.document_title,
-                    text=chunk.text,
-                    score=round(max(result.score - 0.01, settings.min_grounding_score), 4),
-                    source=f"{chunk.document_title}#chunk-{chunk.chunk_index}",
-                    display_source=self._display_source(chunk),
-                    retrieval_method="section",
-                    keyword_score=result.keyword_score,
-                    semantic_score=result.semantic_score,
-                    semantic_source=result.semantic_source,
-                    rerank_score=result.rerank_score,
-                    coverage_score=result.coverage_score,
-                    matched_query=result.matched_query,
-                    query_variant=result.query_variant,
-                    query_boost=result.query_boost,
-                    metadata=dict(chunk.metadata),
-                )
-            )
+            section_results.append(self._context_result_from_chunk(result, chunk, expansion_reason="same_section"))
         return section_results
+
+    def _child_chunk_results(self, result: RetrievalResult) -> list[RetrievalResult]:
+        child_ids = result.metadata.get("child_chunk_ids")
+        if not isinstance(child_ids, list) or not child_ids:
+            return []
+        try:
+            chunks = sorted(
+                self.vector_store.list_chunks_for_document(result.document_id),
+                key=lambda item: item.chunk_index,
+            )
+        except Exception:
+            return []
+        child_id_set = {str(item) for item in child_ids if str(item)}
+        return [
+            self._context_result_from_chunk(result, chunk, expansion_reason="child_chunk")
+            for chunk in chunks
+            if chunk.id in child_id_set
+        ]
+
+    @staticmethod
+    def _context_result_from_chunk(result: RetrievalResult, chunk, *, expansion_reason: str) -> RetrievalResult:
+        return RetrievalResult(
+            chunk_id=chunk.id,
+            document_id=chunk.document_id,
+            document_title=chunk.document_title,
+            text=chunk.text,
+            score=round(max(result.score - 0.01, settings.min_grounding_score), 4),
+            source=f"{chunk.document_title}#chunk-{chunk.chunk_index}",
+            display_source=RetrievalService._display_source(chunk),
+            retrieval_method="section",
+            keyword_score=result.keyword_score,
+            semantic_score=result.semantic_score,
+            semantic_source=result.semantic_source,
+            rerank_score=result.rerank_score,
+            rerank_source=result.rerank_source,
+            rerank_model=result.rerank_model,
+            rerank_error=result.rerank_error,
+            coverage_score=result.coverage_score,
+            matched_query=result.matched_query,
+            query_variant=result.query_variant,
+            query_boost=result.query_boost,
+            result_type="context",
+            is_context_expansion=True,
+            parent_result_id=result.chunk_id,
+            parent_chunk_id=result.chunk_id,
+            expansion_reason=expansion_reason,
+            score_inherited=True,
+            score_note="Context expansion result; scores are inherited from the parent hit with positional decay.",
+            metadata=dict(chunk.metadata),
+        )
 
     def _adjacent_chunk_results(self, result: RetrievalResult) -> list[RetrievalResult]:
         try:
@@ -610,10 +642,20 @@ class RetrievalService:
                     semantic_score=result.semantic_score,
                     semantic_source=result.semantic_source,
                     rerank_score=result.rerank_score,
+                    rerank_source=result.rerank_source,
+                    rerank_model=result.rerank_model,
+                    rerank_error=result.rerank_error,
                     coverage_score=result.coverage_score,
                     matched_query=result.matched_query,
                     query_variant=result.query_variant,
                     query_boost=result.query_boost,
+                    result_type="context",
+                    is_context_expansion=True,
+                    parent_result_id=result.chunk_id,
+                    parent_chunk_id=result.chunk_id,
+                    expansion_reason="adjacent",
+                    score_inherited=True,
+                    score_note="Context expansion result; scores are inherited from the parent hit with positional decay.",
                     metadata=dict(chunk.metadata),
                 )
             )
@@ -657,7 +699,10 @@ class RetrievalService:
         parts = RetrievalService._section_path_parts(metadata)
         if not parts:
             return []
-        return parts[:1]
+        section_level = metadata.get("section_level")
+        if section_level == 1:
+            return parts[:1]
+        return parts
 
     @staticmethod
     def _chunk_index_from_result(result: RetrievalResult) -> int:
@@ -682,10 +727,23 @@ class RetrievalService:
             "semantic_score": float(item["semantic_score"]),
             "semantic_source": str(item["semantic_source"]),
             "rerank_score": 0.0,
+            "rerank_source": "",
+            "rerank_model": "",
+            "rerank_error": "",
             "coverage_score": float(item["coverage_score"]),
+            "metadata_score": float(item.get("metadata_score", 0.0)),
             "matched_query": variant.query,
             "query_variant": variant.label,
             "query_boost": variant.boost,
+            "result_type": "hit",
+            "is_context_expansion": False,
+            "parent_result_id": "",
+            "parent_chunk_id": "",
+            "expansion_reason": "",
+            "score_inherited": False,
+            "score_note": "",
+            "hit_rank": None,
+            "context_rank": None,
             "filter_reason": filter_reason,
             "rank": None,
             "metadata": dict(chunk.metadata),
@@ -707,12 +765,24 @@ class RetrievalService:
             "semantic_score": item.semantic_score,
             "semantic_source": item.semantic_source,
             "rerank_score": item.rerank_score,
+            "rerank_source": item.rerank_source,
+            "rerank_model": item.rerank_model,
+            "rerank_error": item.rerank_error,
             "coverage_score": item.coverage_score,
             "matched_query": item.matched_query,
             "query_variant": item.query_variant,
             "query_boost": item.query_boost,
-            "filter_reason": filter_reason,
-            "rank": rank,
+            "result_type": item.result_type,
+            "is_context_expansion": item.is_context_expansion,
+            "parent_result_id": item.parent_result_id,
+            "parent_chunk_id": item.parent_chunk_id,
+            "expansion_reason": item.expansion_reason,
+            "score_inherited": item.score_inherited,
+            "score_note": item.score_note,
+            "filter_reason": "context_expansion" if item.result_type == "context" else filter_reason,
+            "rank": item.context_rank if item.result_type == "context" else item.hit_rank or rank,
+            "hit_rank": item.hit_rank or None,
+            "context_rank": item.context_rank or None,
             "metadata": dict(item.metadata),
             "section_path": item.metadata.get("section_path", ""),
         }
@@ -731,7 +801,49 @@ class RetrievalService:
 
     @staticmethod
     def _result_signature(item: RetrievalResult) -> str:
-        return normalize_text(item.text)[:180].lower()
+        metadata = item.metadata or {}
+        block_type = str(metadata.get("block_type", "")).strip().lower()
+        row_id = str(metadata.get("row_id", "")).strip()
+        section_path = str(metadata.get("section_path", "")).strip()
+        if block_type == "table_row" and row_id:
+            return f"table_row:{item.document_id}:{section_path}:{row_id}".lower()
+
+        chunk_id = item.chunk_id.strip()
+        if chunk_id:
+            return f"chunk:{item.document_id}:{chunk_id}".lower()
+
+        text_hash = hashlib.sha1(normalize_text(item.text).encode("utf-8")).hexdigest()[:16]
+        return f"text:{item.document_id}:{section_path}:{text_hash}".lower()
+
+    @staticmethod
+    def _metadata_match_score(query_metadata: dict[str, Any], chunk_metadata: dict[str, Any]) -> float:
+        if not query_metadata or not chunk_metadata:
+            return 0.0
+        weights = {
+            "country": 0.28,
+            "region": 0.14,
+            "channel": 0.16,
+            "incoterm": 0.18,
+            "product_category": 0.18,
+            "doc_type": 0.06,
+        }
+        score = 0.0
+        total = 0.0
+        for key, weight in weights.items():
+            query_value = str(query_metadata.get(key, "")).strip().lower()
+            if not query_value:
+                continue
+            total += weight
+            raw_chunk_value = chunk_metadata.get(key, "")
+            if isinstance(raw_chunk_value, list):
+                chunk_values = {str(value).strip().lower() for value in raw_chunk_value if str(value).strip()}
+            else:
+                chunk_values = {str(raw_chunk_value).strip().lower()} if str(raw_chunk_value).strip() else set()
+            if query_value in chunk_values:
+                score += weight
+        if total <= 0:
+            return 0.0
+        return score / total
 
     @staticmethod
     def _char_ngrams(text: str, min_n: int = 2, max_n: int = 3) -> Counter[str]:

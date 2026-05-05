@@ -124,10 +124,22 @@ class RetrievalResult(BaseModel):
     semantic_score: float = 0.0
     semantic_source: str = "heuristic"
     rerank_score: float = 0.0
+    rerank_source: str = "heuristic"
+    rerank_model: str = ""
+    rerank_error: str = ""
     coverage_score: float = 0.0
     matched_query: str = ""
     query_variant: str = "primary"
     query_boost: float = 1.0
+    result_type: str = "hit"
+    is_context_expansion: bool = False
+    parent_result_id: str = ""
+    parent_chunk_id: str = ""
+    expansion_reason: str = ""
+    score_inherited: bool = False
+    score_note: str = ""
+    hit_rank: int = 0
+    context_rank: int = 0
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -208,8 +220,22 @@ class DocumentTask(BaseModel):
 class EvaluationCase(BaseModel):
     id: str
     question: str
-    expected_keywords: list[str]
-    expected_document: str
+    expected_answer: str = ""
+    expected_keywords: list[str] = Field(default_factory=list)
+    expected_document: str = ""
+    expected_documents: list[str] = Field(default_factory=list)
+    expected_sections: list[str] = Field(default_factory=list)
+    expected_chunks: list[str] = Field(default_factory=list)
+    expected_table_rows: list[str] = Field(default_factory=list)
+    country: str = ""
+    region: str = ""
+    channel: str = ""
+    incoterm: str = ""
+    product_category: str = ""
+    effective_date: str = ""
+    query_type: str = ""
+    doc_type: str = ""
+    negative: bool = False
 
 
 class EvaluationRun(BaseModel):
@@ -218,6 +244,15 @@ class EvaluationRun(BaseModel):
     answer_rate: float
     citation_hit_rate: float
     keyword_hit_rate: float
+    recall_at_k: float = 0.0
+    precision_at_k: float = 0.0
+    mrr: float = 0.0
+    citation_accuracy: float = 0.0
+    retrieval_citation_accuracy: float = 0.0
+    answer_citation_accuracy: float = 0.0
+    no_answer_accuracy: float = 0.0
+    table_exact_match: float = 0.0
+    version_accuracy: float = 0.0
     details: list[dict[str, Any]]
     created_at: datetime = Field(default_factory=utc_now)
 

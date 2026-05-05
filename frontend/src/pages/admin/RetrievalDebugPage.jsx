@@ -28,7 +28,13 @@ const filterLabels = {
   duplicate: "重复片段",
   below_min_score: "低于阈值",
   outside_candidate_k: "超出候选池",
+  context_expansion: "扩展上下文",
   candidate: "候选",
+};
+
+const resultTypeLabels = {
+  hit: "Hit",
+  context: "Context",
 };
 
 function numberValue(value) {
@@ -57,6 +63,20 @@ function summarizeFilters(candidates = []) {
 
 function sectionPath(item) {
   return item.section_path || item.metadata?.section_path || "";
+}
+
+function resultRankLabel(item) {
+  if (item.result_type === "context") {
+    return `Context #${item.context_rank || item.rank || "-"}`;
+  }
+  return `Hit #${item.hit_rank || item.rank || "-"}`;
+}
+
+function rerankLabel(item) {
+  const source = item.rerank_source || "heuristic";
+  const model = item.rerank_model ? ` / ${item.rerank_model}` : "";
+  const fallback = item.rerank_error ? ` / fallback: ${item.rerank_error}` : "";
+  return `rerank ${source}${model}${fallback}`;
 }
 
 function ConfigFields({ config, onChange }) {
@@ -164,19 +184,31 @@ function DebugColumn({ title, debug }) {
           <div className="chunk-list">
             {debug.results?.length ? (
               debug.results.map((item) => (
-                <article key={`${title}-${item.chunk_id}-${item.query_variant}`} className="chunk-card">
+                <article
+                  key={`${title}-${item.chunk_id}-${item.query_variant}-${item.result_type || "hit"}`}
+                  className={`chunk-card ${item.result_type === "context" ? "context-expansion" : ""}`}
+                >
                   <strong>
-                    #{item.rank} {item.display_source || item.source}
+                    {resultRankLabel(item)} {item.display_source || item.source} ·{" "}
+                    {resultTypeLabels[item.result_type || "hit"] || item.result_type}
                   </strong>
                   {sectionPath(item) ? <small>章节 {sectionPath(item)}</small> : null}
+                  {item.result_type === "context" ? (
+                    <small>
+                      {item.expansion_reason || "context"} / parent {item.parent_chunk_id || "-"} /{" "}
+                      {item.score_inherited ? "score inherited" : "score independent"}
+                    </small>
+                  ) : null}
                   <p>{truncate(item.text, 150)}</p>
                   <small>
                     总分 {item.score} / 关键词 {item.keyword_score} / 语义 {item.semantic_score} / 重排{" "}
                     {item.rerank_score}
                   </small>
+                  <small>{rerankLabel(item)}</small>
                   <small>
                     {item.semantic_source} / {item.query_variant} / {item.matched_query || "-"}
                   </small>
+                  {item.score_note ? <small>{item.score_note}</small> : null}
                 </article>
               ))
             ) : (

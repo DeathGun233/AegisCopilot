@@ -27,6 +27,10 @@ dev = [
 milvus = [
   "pymilvus>=2.5.0",
 ]
+ocr = [
+  "Pillow>=10.0.0",
+  "pytesseract>=0.3.10",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

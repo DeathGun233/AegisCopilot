@@ -13,6 +13,7 @@ if str(ROOT / "backend") not in sys.path:
     sys.path.insert(0, str(ROOT / "backend"))
 
 from app.models import AgentTask, AuthSession, Chunk, Conversation, Document, DocumentTask, User
+from app.services.chunk_hierarchy import assign_chunk_hierarchy
 from app.sql_repositories import (
     SqlConversationRepository,
     SqlDatabase,
@@ -85,10 +86,17 @@ def _load_sessions(path: Path) -> list[AuthSession]:
 def _load_payload(storage_dir: Path) -> MigrationPayload:
     runtime_model = _read_json(storage_dir / "runtime_model.json")
     runtime_retrieval = _read_json(storage_dir / "runtime_retrieval.json")
+    chunks = _load_records(storage_dir / "chunks.json", Chunk)
+    chunks_by_document: dict[str, list[Chunk]] = {}
+    for chunk in chunks:
+        chunks_by_document.setdefault(chunk.document_id, []).append(chunk)
+    normalized_chunks: list[Chunk] = []
+    for document_chunks in chunks_by_document.values():
+        normalized_chunks.extend(assign_chunk_hierarchy(sorted(document_chunks, key=lambda item: item.chunk_index)))
     return MigrationPayload(
         conversations=_load_records(storage_dir / "conversations.json", Conversation),
         documents=_load_records(storage_dir / "documents.json", Document),
-        chunks=_load_records(storage_dir / "chunks.json", Chunk),
+        chunks=normalized_chunks,
         document_tasks=_load_records(storage_dir / "document_tasks.json", DocumentTask),
         tasks=_load_records(storage_dir / "tasks.json", AgentTask),
         users=_load_records(storage_dir / "users.json", User),

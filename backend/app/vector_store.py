@@ -87,12 +87,20 @@ class MilvusVectorStore:
         collection: str,
         dimension: int,
         query_limit: int = 16384,
+        metric_type: str = "COSINE",
+        index_type: str = "FLAT",
+        index_params: dict[str, object] | None = None,
+        search_params: dict[str, object] | None = None,
     ) -> None:
         self.uri = uri
         self.token = token
         self.collection = collection
         self.dimension = dimension
         self.query_limit = query_limit
+        self.metric_type = metric_type.strip().upper() or "COSINE"
+        self.index_type = index_type.strip().upper() or "AUTOINDEX"
+        self.index_params = dict(index_params or {})
+        self.search_params = dict(search_params or {})
         pymilvus = self._load_pymilvus()
         self._data_type = getattr(pymilvus, "DataType", None)
         client_options: dict[str, object] = {"uri": uri}
@@ -122,7 +130,9 @@ class MilvusVectorStore:
             primary_field_name="id",
             id_type=id_type,
             vector_field_name="embedding",
-            metric_type="COSINE",
+            metric_type=self.metric_type,
+            index_type=self.index_type,
+            index_params=self.index_params,
             auto_id=False,
             max_length=128,
         )
@@ -157,6 +167,7 @@ class MilvusVectorStore:
             data=[query_embedding],
             limit=limit,
             output_fields=self.output_fields,
+            search_params={"metric_type": self.metric_type, "params": self.search_params},
         )
         hits = result[0] if result and isinstance(result[0], list) else result
         return [self._record_to_chunk(hit) for hit in hits]

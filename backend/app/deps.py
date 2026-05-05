@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import json
 from pathlib import Path
 
 from fastapi import Header, HTTPException, status
@@ -34,6 +35,7 @@ from .services.embeddings import EmbeddingService
 from .services.extraction import ExtractionService
 from .services.generation_service import GenerationService
 from .services.query_understanding import QueryUnderstandingService
+from .services.rerank import RerankService
 from .services.retrieval import RetrievalService
 from .services.runtime_models import RuntimeModelService
 from .services.runtime_retrieval import RuntimeRetrievalService
@@ -83,18 +85,23 @@ class Container:
             self.runtime_model_service = RuntimeModelService(storage / "runtime_model.json")
         self.vector_store = self._build_vector_store()
         self.embedding_service = EmbeddingService()
+        self.rerank_service = RerankService.from_settings(settings)
         self.document_service = DocumentService(
             self.documents,
             self.document_tasks,
             self.vector_store,
             self.embedding_service,
         )
-        self.extraction_service = ExtractionService()
+        self.extraction_service = ExtractionService(
+            enable_ocr=settings.ocr_enabled,
+            ocr_languages=settings.ocr_languages,
+        )
         self.retrieval_service = RetrievalService(
             self.documents,
             self.vector_store,
             self.runtime_retrieval_service,
             self.embedding_service,
+            reranker=self.rerank_service,
         )
         self.query_understanding_service = QueryUnderstandingService()
         self.tool_service = ToolService(self.retrieval_service)
@@ -131,6 +138,10 @@ class Container:
                 token=settings.milvus_token,
                 collection=settings.milvus_collection,
                 dimension=settings.embedding_dimensions,
+                metric_type=settings.milvus_metric_type,
+                index_type=settings.milvus_index_type,
+                index_params=json.loads(settings.milvus_index_params or "{}"),
+                search_params=json.loads(settings.milvus_search_params or "{}"),
             )
         raise ValueError(
             "Unsupported AEGIS_VECTOR_STORE_PROVIDER "

@@ -1,0 +1,2076 @@
+[
+  {
+    "id": "logistics-001",
+    "question": "德国 DDP 渠道带电产品需要哪些清关资料？",
+    "expected_answer": "需要 MSDS、UN38.3、运输鉴定书；纯电池不接，内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery"
+    ],
+    "expected_keywords": [
+      "MSDS",
+      "UN38.3",
+      "运输鉴定书",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "带电",
+    "effective_date": "2026-05-01",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-002",
+    "question": "美国 FBA 偏远地区附加费从什么时候生效？",
+    "expected_answer": "以费用表中最新生效日期为准，当前生效日期为 2026-05-01。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "生效日期",
+      "2026-05-01"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-003",
+    "question": "欧盟 DAP 渠道 VAT 申报需要哪些资料？",
+    "expected_answer": "需要收件方 VAT 号、商业发票、申报金额、品名和 HS Code。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "VAT",
+      "DAP",
+      "商业发票",
+      "HS Code"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-004",
+    "question": "德国 DDP 可以发纯电池吗？",
+    "expected_answer": "纯电池不接；内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "纯电池",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "prohibited_item",
+    "doc_type": "policy",
+    "negative": false
+  },
+  {
+    "id": "logistics-005",
+    "question": "客户问日本邮政小包液体产品能否承运，知识库没有这条规则时应该怎么回答？",
+    "expected_answer": "知识库没有答案时应拒答，不得编造渠道规则。",
+    "expected_documents": [],
+    "expected_keywords": [],
+    "country": "JP",
+    "region": "Asia",
+    "channel": "邮政小包",
+    "product_category": "液体",
+    "query_type": "no_answer",
+    "doc_type": "policy",
+    "negative": true
+  },
+  {
+    "id": "logistics-006",
+    "question": "德国 DDP 液体产品需要提供 MSDS 吗？",
+    "expected_answer": "液体产品需要成分说明、MSDS，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-liquid"
+    ],
+    "expected_keywords": [
+      "液体",
+      "成分说明",
+      "MSDS",
+      "单票需提前确认"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "液体",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-007",
+    "question": "德国 DDP 粉末类产品需要哪些资料？",
+    "expected_answer": "粉末类产品需要 MSDS、用途说明，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-powder"
+    ],
+    "expected_keywords": [
+      "粉末",
+      "MSDS",
+      "用途说明"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "粉末",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-008",
+    "question": "美国 FBA 偏远附加费使用什么币种？",
+    "expected_answer": "费用表中偏远附加费币种为 USD。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "USD",
+      "币种"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-009",
+    "question": "欧盟 DAP VAT 申报资料是否必须和清关资料保持一致？",
+    "expected_answer": "必须保持一致；适用于欧盟国家。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "清关资料",
+      "保持一致",
+      "欧盟国家"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-010",
+    "question": "欧盟 DAP VAT 申报规则的生效日期是什么？",
+    "expected_answer": "生效日期为 2026-05-01。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "版本"
+    ],
+    "expected_keywords": [
+      "生效日期",
+      "2026-05-01"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "effective_date": "2026-05-01",
+    "query_type": "version_lookup",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-011",
+    "question": "法国 DDP 带电产品能否按德国规则直接承运？",
+    "expected_answer": "知识库没有法国 DDP 带电规则时应拒答，不能用德国规则替代。",
+    "expected_documents": [],
+    "expected_keywords": [],
+    "country": "FR",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "带电",
+    "query_type": "country_mismatch",
+    "doc_type": "policy",
+    "negative": true
+  },
+  {
+    "id": "logistics-012",
+    "question": "日本邮政小包粉末产品需要哪些资料？",
+    "expected_answer": "知识库没有日本邮政小包粉末规则时应拒答。",
+    "expected_documents": [],
+    "expected_keywords": [],
+    "country": "JP",
+    "region": "Asia",
+    "channel": "邮政小包",
+    "product_category": "粉末",
+    "query_type": "no_answer",
+    "doc_type": "policy",
+    "negative": true
+  },
+  {
+    "id": "logistics-013",
+    "question": "德国 DDP 带电产品和纯电池的处理差异是什么？",
+    "expected_answer": "带电产品需要 MSDS、UN38.3、运输鉴定书；纯电池不接。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品",
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery",
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "带电",
+      "纯电池",
+      "UN38.3",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "comparison",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-014",
+    "question": "德国 DDP 带电货清关文件要准备什么？",
+    "expected_answer": "需要 MSDS、UN38.3、运输鉴定书；纯电池不接，内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery"
+    ],
+    "expected_keywords": [
+      "MSDS",
+      "UN38.3",
+      "运输鉴定书",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "带电",
+    "effective_date": "2026-05-01",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-015",
+    "question": "德国 DDP 空派内置电池产品需要 MSDS 吗？",
+    "expected_answer": "需要 MSDS、UN38.3、运输鉴定书；纯电池不接，内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery"
+    ],
+    "expected_keywords": [
+      "MSDS",
+      "UN38.3",
+      "运输鉴定书",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "带电",
+    "effective_date": "2026-05-01",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-016",
+    "question": "德国 DDP 带电产品是否需要 UN38.3？",
+    "expected_answer": "需要 MSDS、UN38.3、运输鉴定书；纯电池不接，内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery"
+    ],
+    "expected_keywords": [
+      "MSDS",
+      "UN38.3",
+      "运输鉴定书",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "带电",
+    "effective_date": "2026-05-01",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-017",
+    "question": "德国 DDP 带电产品运输鉴定书是否必需？",
+    "expected_answer": "需要 MSDS、UN38.3、运输鉴定书；纯电池不接，内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery"
+    ],
+    "expected_keywords": [
+      "MSDS",
+      "UN38.3",
+      "运输鉴定书",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "带电",
+    "effective_date": "2026-05-01",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-018",
+    "question": "德国 DDP 带电产品的限制是什么？",
+    "expected_answer": "需要 MSDS、UN38.3、运输鉴定书；纯电池不接，内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery"
+    ],
+    "expected_keywords": [
+      "MSDS",
+      "UN38.3",
+      "运输鉴定书",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "带电",
+    "effective_date": "2026-05-01",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-019",
+    "question": "德国 DDP 带电产品清关资料有哪些？",
+    "expected_answer": "需要 MSDS、UN38.3、运输鉴定书；纯电池不接，内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery"
+    ],
+    "expected_keywords": [
+      "MSDS",
+      "UN38.3",
+      "运输鉴定书",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "带电",
+    "effective_date": "2026-05-01",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-020",
+    "question": "德国 DDP 空派带电货能不能按普货出？",
+    "expected_answer": "需要 MSDS、UN38.3、运输鉴定书；纯电池不接，内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery"
+    ],
+    "expected_keywords": [
+      "MSDS",
+      "UN38.3",
+      "运输鉴定书",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "带电",
+    "effective_date": "2026-05-01",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-021",
+    "question": "德国 DDP 带电产品需要提前提供哪些资料？",
+    "expected_answer": "需要 MSDS、UN38.3、运输鉴定书；纯电池不接，内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery"
+    ],
+    "expected_keywords": [
+      "MSDS",
+      "UN38.3",
+      "运输鉴定书",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "带电",
+    "effective_date": "2026-05-01",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-022",
+    "question": "德国 DDP 纯电池能不能走？",
+    "expected_answer": "纯电池不接；内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "纯电池",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "prohibited_item",
+    "doc_type": "policy",
+    "negative": false
+  },
+  {
+    "id": "logistics-023",
+    "question": "德国 DDP 空派纯电池接不接？",
+    "expected_answer": "纯电池不接；内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "纯电池",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "prohibited_item",
+    "doc_type": "policy",
+    "negative": false
+  },
+  {
+    "id": "logistics-024",
+    "question": "德国 DDP 纯电池和内置电池怎么区分处理？",
+    "expected_answer": "纯电池不接；内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "纯电池",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "prohibited_item",
+    "doc_type": "policy",
+    "negative": false
+  },
+  {
+    "id": "logistics-025",
+    "question": "德国 DDP 纯电池限制是什么？",
+    "expected_answer": "纯电池不接；内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "纯电池",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "prohibited_item",
+    "doc_type": "policy",
+    "negative": false
+  },
+  {
+    "id": "logistics-026",
+    "question": "德国 DDP 纯电池是否需要单独确认？",
+    "expected_answer": "纯电池不接；内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "纯电池",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "prohibited_item",
+    "doc_type": "policy",
+    "negative": false
+  },
+  {
+    "id": "logistics-027",
+    "question": "德国 DDP 纯电池是否属于禁限运？",
+    "expected_answer": "纯电池不接；内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "纯电池",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "prohibited_item",
+    "doc_type": "policy",
+    "negative": false
+  },
+  {
+    "id": "logistics-028",
+    "question": "德国 DDP 客户发纯电池应怎么答复？",
+    "expected_answer": "纯电池不接；内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "纯电池",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "prohibited_item",
+    "doc_type": "policy",
+    "negative": false
+  },
+  {
+    "id": "logistics-029",
+    "question": "德国 DDP 纯电池规则的生效日期是什么？",
+    "expected_answer": "纯电池不接；内置电池需单独确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "纯电池",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "prohibited_item",
+    "doc_type": "policy",
+    "negative": false
+  },
+  {
+    "id": "logistics-030",
+    "question": "美国 FBA 偏远附加费哪天开始执行？",
+    "expected_answer": "以费用表中最新生效日期为准，当前生效日期为 2026-05-01。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "生效日期",
+      "2026-05-01"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-031",
+    "question": "美国 FBA 偏远费生效日期是多少？",
+    "expected_answer": "以费用表中最新生效日期为准，当前生效日期为 2026-05-01。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "生效日期",
+      "2026-05-01"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-032",
+    "question": "美国 FBA 命中偏远邮编会加收什么费用？",
+    "expected_answer": "以费用表中最新生效日期为准，当前生效日期为 2026-05-01。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "生效日期",
+      "2026-05-01"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-033",
+    "question": "美国 FBA 偏远附加费按什么规则核对？",
+    "expected_answer": "以费用表中最新生效日期为准，当前生效日期为 2026-05-01。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "生效日期",
+      "2026-05-01"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-034",
+    "question": "美国 FBA 偏远附加费是否需要看渠道账单？",
+    "expected_answer": "以费用表中最新生效日期为准，当前生效日期为 2026-05-01。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "生效日期",
+      "2026-05-01"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-035",
+    "question": "美国 FBA 偏远附加费要结合哪些因素？",
+    "expected_answer": "以费用表中最新生效日期为准，当前生效日期为 2026-05-01。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "生效日期",
+      "2026-05-01"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-036",
+    "question": "美国 FBA 偏远附加费是否按票加收？",
+    "expected_answer": "以费用表中最新生效日期为准，当前生效日期为 2026-05-01。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "生效日期",
+      "2026-05-01"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-037",
+    "question": "美国 FBA 偏远附加费查哪张表？",
+    "expected_answer": "以费用表中最新生效日期为准，当前生效日期为 2026-05-01。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "生效日期",
+      "2026-05-01"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-038",
+    "question": "美国 FBA 偏远附加费用 USD 还是 EUR？",
+    "expected_answer": "费用表中偏远附加费币种为 USD。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "USD",
+      "币种"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-039",
+    "question": "美国 FBA 偏远费币种是什么？",
+    "expected_answer": "费用表中偏远附加费币种为 USD。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "USD",
+      "币种"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-040",
+    "question": "美国 FBA 偏远附加费表的币种字段是什么？",
+    "expected_answer": "费用表中偏远附加费币种为 USD。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "USD",
+      "币种"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-041",
+    "question": "美国 FBA 附加费报价币种如何确认？",
+    "expected_answer": "费用表中偏远附加费币种为 USD。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "USD",
+      "币种"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-042",
+    "question": "美国 FBA 偏远附加费是否使用美元？",
+    "expected_answer": "费用表中偏远附加费币种为 USD。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "USD",
+      "币种"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-043",
+    "question": "美国 FBA 费用表里偏远附加费币种是多少？",
+    "expected_answer": "费用表中偏远附加费币种为 USD。",
+    "expected_documents": [
+      "美国 FBA 附加费表"
+    ],
+    "expected_sections": [
+      "偏远附加费"
+    ],
+    "expected_table_rows": [
+      "row-us-fba-remote-fee"
+    ],
+    "expected_keywords": [
+      "偏远附加费",
+      "USD",
+      "币种"
+    ],
+    "country": "US",
+    "region": "North America",
+    "channel": "FBA",
+    "query_type": "fee_table_lookup",
+    "doc_type": "price_table",
+    "effective_date": "2026-05-01",
+    "negative": false
+  },
+  {
+    "id": "logistics-044",
+    "question": "欧盟 DAP VAT 申报资料清单是什么？",
+    "expected_answer": "需要收件方 VAT 号、商业发票、申报金额、品名和 HS Code。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "VAT",
+      "DAP",
+      "商业发票",
+      "HS Code"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-045",
+    "question": "欧盟 DAP 做 VAT 申报要 VAT 号吗？",
+    "expected_answer": "需要收件方 VAT 号、商业发票、申报金额、品名和 HS Code。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "VAT",
+      "DAP",
+      "商业发票",
+      "HS Code"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-046",
+    "question": "欧盟 DAP VAT 申报是否需要商业发票？",
+    "expected_answer": "需要收件方 VAT 号、商业发票、申报金额、品名和 HS Code。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "VAT",
+      "DAP",
+      "商业发票",
+      "HS Code"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-047",
+    "question": "欧盟 DAP VAT 申报需要 HS Code 吗？",
+    "expected_answer": "需要收件方 VAT 号、商业发票、申报金额、品名和 HS Code。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "VAT",
+      "DAP",
+      "商业发票",
+      "HS Code"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-048",
+    "question": "欧盟 DAP VAT 申报需要申报金额吗？",
+    "expected_answer": "需要收件方 VAT 号、商业发票、申报金额、品名和 HS Code。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "VAT",
+      "DAP",
+      "商业发票",
+      "HS Code"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-049",
+    "question": "欧盟 DAP VAT 申报适用于哪些地区？",
+    "expected_answer": "需要收件方 VAT 号、商业发票、申报金额、品名和 HS Code。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "VAT",
+      "DAP",
+      "商业发票",
+      "HS Code"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-050",
+    "question": "欧盟 DAP VAT 资料包含品名吗？",
+    "expected_answer": "需要收件方 VAT 号、商业发票、申报金额、品名和 HS Code。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "VAT",
+      "DAP",
+      "商业发票",
+      "HS Code"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-051",
+    "question": "欧盟 DAP VAT 申报资料有哪些？",
+    "expected_answer": "需要收件方 VAT 号、商业发票、申报金额、品名和 HS Code。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "VAT",
+      "DAP",
+      "商业发票",
+      "HS Code"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-052",
+    "question": "欧盟 DAP VAT 申报资料和清关资料能不一致吗？",
+    "expected_answer": "必须保持一致；适用于欧盟国家。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "清关资料",
+      "保持一致",
+      "欧盟国家"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-053",
+    "question": "欧盟 DAP VAT 资料是否要和清关资料一致？",
+    "expected_answer": "必须保持一致；适用于欧盟国家。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "清关资料",
+      "保持一致",
+      "欧盟国家"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-054",
+    "question": "欧盟 DAP VAT 申报适用于欧盟国家吗？",
+    "expected_answer": "必须保持一致；适用于欧盟国家。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "清关资料",
+      "保持一致",
+      "欧盟国家"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-055",
+    "question": "欧盟 DAP VAT 申报资料一致性要求是什么？",
+    "expected_answer": "必须保持一致；适用于欧盟国家。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "清关资料",
+      "保持一致",
+      "欧盟国家"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-056",
+    "question": "欧盟 DAP VAT 清关资料同步要求是什么？",
+    "expected_answer": "必须保持一致；适用于欧盟国家。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "VAT 申报资料"
+    ],
+    "expected_keywords": [
+      "清关资料",
+      "保持一致",
+      "欧盟国家"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "query_type": "customs_requirement",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-057",
+    "question": "欧盟 VAT 申报规则什么时候生效？",
+    "expected_answer": "生效日期为 2026-05-01。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "版本"
+    ],
+    "expected_keywords": [
+      "生效日期",
+      "2026-05-01"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "effective_date": "2026-05-01",
+    "query_type": "version_lookup",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-058",
+    "question": "欧盟 DAP VAT 规则版本日期是多少？",
+    "expected_answer": "生效日期为 2026-05-01。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "版本"
+    ],
+    "expected_keywords": [
+      "生效日期",
+      "2026-05-01"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "effective_date": "2026-05-01",
+    "query_type": "version_lookup",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-059",
+    "question": "欧盟 VAT 申报规则生效日期查哪里？",
+    "expected_answer": "生效日期为 2026-05-01。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "版本"
+    ],
+    "expected_keywords": [
+      "生效日期",
+      "2026-05-01"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "effective_date": "2026-05-01",
+    "query_type": "version_lookup",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-060",
+    "question": "欧盟 DAP VAT 生效日期是 2026-05-01 吗？",
+    "expected_answer": "生效日期为 2026-05-01。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "版本"
+    ],
+    "expected_keywords": [
+      "生效日期",
+      "2026-05-01"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "effective_date": "2026-05-01",
+    "query_type": "version_lookup",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-061",
+    "question": "欧盟 VAT 规则版本信息是什么？",
+    "expected_answer": "生效日期为 2026-05-01。",
+    "expected_documents": [
+      "欧盟 VAT 申报规则"
+    ],
+    "expected_sections": [
+      "版本"
+    ],
+    "expected_keywords": [
+      "生效日期",
+      "2026-05-01"
+    ],
+    "region": "EU",
+    "incoterm": "DAP",
+    "effective_date": "2026-05-01",
+    "query_type": "version_lookup",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-062",
+    "question": "德国 DDP 液体货需要什么资料？",
+    "expected_answer": "液体产品需要成分说明、MSDS，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-liquid"
+    ],
+    "expected_keywords": [
+      "液体",
+      "成分说明",
+      "MSDS",
+      "单票需提前确认"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "液体",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-063",
+    "question": "德国 DDP 液体产品是否需要成分说明？",
+    "expected_answer": "液体产品需要成分说明、MSDS，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-liquid"
+    ],
+    "expected_keywords": [
+      "液体",
+      "成分说明",
+      "MSDS",
+      "单票需提前确认"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "液体",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-064",
+    "question": "德国 DDP 液体产品是否要单票确认？",
+    "expected_answer": "液体产品需要成分说明、MSDS，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-liquid"
+    ],
+    "expected_keywords": [
+      "液体",
+      "成分说明",
+      "MSDS",
+      "单票需提前确认"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "液体",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-065",
+    "question": "德国 DDP 液体货是否需要 MSDS？",
+    "expected_answer": "液体产品需要成分说明、MSDS，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-liquid"
+    ],
+    "expected_keywords": [
+      "液体",
+      "成分说明",
+      "MSDS",
+      "单票需提前确认"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "液体",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-066",
+    "question": "德国 DDP 空派液体产品限制是什么？",
+    "expected_answer": "液体产品需要成分说明、MSDS，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-liquid"
+    ],
+    "expected_keywords": [
+      "液体",
+      "成分说明",
+      "MSDS",
+      "单票需提前确认"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "液体",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-067",
+    "question": "德国 DDP 液体类产品清关资料有哪些？",
+    "expected_answer": "液体产品需要成分说明、MSDS，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-liquid"
+    ],
+    "expected_keywords": [
+      "液体",
+      "成分说明",
+      "MSDS",
+      "单票需提前确认"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "液体",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-068",
+    "question": "德国 DDP 粉末货需要什么资料？",
+    "expected_answer": "粉末类产品需要 MSDS、用途说明，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-powder"
+    ],
+    "expected_keywords": [
+      "粉末",
+      "MSDS",
+      "用途说明"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "粉末",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-069",
+    "question": "德国 DDP 粉末产品是否需要用途说明？",
+    "expected_answer": "粉末类产品需要 MSDS、用途说明，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-powder"
+    ],
+    "expected_keywords": [
+      "粉末",
+      "MSDS",
+      "用途说明"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "粉末",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-070",
+    "question": "德国 DDP 粉末是否需要 MSDS？",
+    "expected_answer": "粉末类产品需要 MSDS、用途说明，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-powder"
+    ],
+    "expected_keywords": [
+      "粉末",
+      "MSDS",
+      "用途说明"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "粉末",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-071",
+    "question": "德国 DDP 空派粉末类产品限制是什么？",
+    "expected_answer": "粉末类产品需要 MSDS、用途说明，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-powder"
+    ],
+    "expected_keywords": [
+      "粉末",
+      "MSDS",
+      "用途说明"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "粉末",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-072",
+    "question": "德国 DDP 粉末类是否要提前确认？",
+    "expected_answer": "粉末类产品需要 MSDS、用途说明，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-powder"
+    ],
+    "expected_keywords": [
+      "粉末",
+      "MSDS",
+      "用途说明"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "粉末",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-073",
+    "question": "德国 DDP 粉末产品清关资料有哪些？",
+    "expected_answer": "粉末类产品需要 MSDS、用途说明，并且单票需提前确认。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 液体和粉末"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-powder"
+    ],
+    "expected_keywords": [
+      "粉末",
+      "MSDS",
+      "用途说明"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "粉末",
+    "effective_date": "2026-05-01",
+    "query_type": "restricted_item",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-074",
+    "question": "德国 DDP 带电和纯电池有什么不同？",
+    "expected_answer": "带电产品需要 MSDS、UN38.3、运输鉴定书；纯电池不接。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品",
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery",
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "带电",
+      "纯电池",
+      "UN38.3",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "comparison",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-075",
+    "question": "德国 DDP 内置电池和纯电池怎么答？",
+    "expected_answer": "带电产品需要 MSDS、UN38.3、运输鉴定书；纯电池不接。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品",
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery",
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "带电",
+      "纯电池",
+      "UN38.3",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "comparison",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-076",
+    "question": "德国 DDP 带电货和纯电池承运差异是什么？",
+    "expected_answer": "带电产品需要 MSDS、UN38.3、运输鉴定书；纯电池不接。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品",
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery",
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "带电",
+      "纯电池",
+      "UN38.3",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "comparison",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-077",
+    "question": "德国 DDP 带电资料和纯电池限制分别是什么？",
+    "expected_answer": "带电产品需要 MSDS、UN38.3、运输鉴定书；纯电池不接。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品",
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery",
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "带电",
+      "纯电池",
+      "UN38.3",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "comparison",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-078",
+    "question": "德国 DDP 电池类产品规则怎么区分？",
+    "expected_answer": "带电产品需要 MSDS、UN38.3、运输鉴定书；纯电池不接。",
+    "expected_documents": [
+      "欧洲 DDP 渠道清关资料表"
+    ],
+    "expected_sections": [
+      "德国 > 带电产品",
+      "德国 > 纯电池"
+    ],
+    "expected_table_rows": [
+      "row-de-ddp-battery",
+      "row-de-ddp-pure-battery"
+    ],
+    "expected_keywords": [
+      "带电",
+      "纯电池",
+      "UN38.3",
+      "纯电池不接"
+    ],
+    "country": "DE",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "纯电池",
+    "effective_date": "2026-05-01",
+    "query_type": "comparison",
+    "doc_type": "customs_rule",
+    "negative": false
+  },
+  {
+    "id": "logistics-079",
+    "question": "日本邮政小包液体能不能发？",
+    "expected_answer": "知识库没有答案时应拒答，不得编造渠道规则。",
+    "expected_documents": [],
+    "expected_keywords": [],
+    "country": "JP",
+    "region": "Asia",
+    "channel": "邮政小包",
+    "product_category": "液体",
+    "query_type": "no_answer",
+    "doc_type": "policy",
+    "negative": true
+  },
+  {
+    "id": "logistics-080",
+    "question": "日本邮政小包液体没有知识库规则怎么回答？",
+    "expected_answer": "知识库没有答案时应拒答，不得编造渠道规则。",
+    "expected_documents": [],
+    "expected_keywords": [],
+    "country": "JP",
+    "region": "Asia",
+    "channel": "邮政小包",
+    "product_category": "液体",
+    "query_type": "no_answer",
+    "doc_type": "policy",
+    "negative": true
+  },
+  {
+    "id": "logistics-081",
+    "question": "日本邮政小包液体承运规则查不到时怎么办？",
+    "expected_answer": "知识库没有答案时应拒答，不得编造渠道规则。",
+    "expected_documents": [],
+    "expected_keywords": [],
+    "country": "JP",
+    "region": "Asia",
+    "channel": "邮政小包",
+    "product_category": "液体",
+    "query_type": "no_answer",
+    "doc_type": "policy",
+    "negative": true
+  },
+  {
+    "id": "logistics-082",
+    "question": "日本邮政小包液体产品是否可以编造渠道规则？",
+    "expected_answer": "知识库没有答案时应拒答，不得编造渠道规则。",
+    "expected_documents": [],
+    "expected_keywords": [],
+    "country": "JP",
+    "region": "Asia",
+    "channel": "邮政小包",
+    "product_category": "液体",
+    "query_type": "no_answer",
+    "doc_type": "policy",
+    "negative": true
+  },
+  {
+    "id": "logistics-083",
+    "question": "日本邮政小包液体规则缺失应该拒答吗？",
+    "expected_answer": "知识库没有答案时应拒答，不得编造渠道规则。",
+    "expected_documents": [],
+    "expected_keywords": [],
+    "country": "JP",
+    "region": "Asia",
+    "channel": "邮政小包",
+    "product_category": "液体",
+    "query_type": "no_answer",
+    "doc_type": "policy",
+    "negative": true
+  },
+  {
+    "id": "logistics-084",
+    "question": "法国 DDP 带电产品能套用德国规则吗？",
+    "expected_answer": "知识库没有法国 DDP 带电规则时应拒答，不能用德国规则替代。",
+    "expected_documents": [],
+    "expected_keywords": [],
+    "country": "FR",
+    "region": "EU",
+    "channel": "DDP空派",
+    "incoterm": "DDP",
+    "product_category": "带电",
+    "query_type": "country_mismatch",
+    "doc_type": "policy",
+    "negative": true
+  }
+]

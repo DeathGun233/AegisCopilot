@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import json
 
 from ..config import settings
 from ..models import DocumentTaskStatus, SystemCheck, SystemStats, SystemStatus, User, UserRole
@@ -96,6 +97,7 @@ class SystemService:
             "vector": self._vector_check(),
             "embedding": self._embedding_check(),
             "llm": self._llm_check(),
+            "rerank": self._rerank_check(),
         }
         document_tasks = self._document_task_counts()
         ready = all(check.status != "error" for check in providers.values())
@@ -132,6 +134,10 @@ class SystemService:
             "restart_required_for_changes": True,
             "collection": settings.milvus_collection if provider == "milvus" else "",
             "uri": settings.milvus_uri if provider == "milvus" else "",
+            "metric_type": settings.milvus_metric_type,
+            "index_type": settings.milvus_index_type,
+            "index_params": self._json_detail(settings.milvus_index_params),
+            "search_params": self._json_detail(settings.milvus_search_params),
         }
         try:
             if provider == "milvus":
@@ -184,6 +190,37 @@ class SystemService:
             },
         )
 
+    def _rerank_check(self) -> SystemCheck:
+        provider = settings.rerank_provider.strip().lower() or "heuristic"
+        enabled = provider not in {"", "disabled", "none", "heuristic"}
+        qwen_provider = provider in {"qwen", "dashscope"}
+        api_key_configured = bool(settings.rerank_api_key)
+        missing_key = qwen_provider and not api_key_configured
+        status = "warning" if missing_key else "ok"
+        if provider in {"disabled", "none"}:
+            message = "rerank service is disabled"
+        elif missing_key:
+            message = "Qwen rerank is configured but explicit DashScope rerank key is missing; using heuristic fallback"
+        elif provider == "heuristic":
+            message = "heuristic rerank is active"
+        else:
+            message = "rerank service is configured"
+        return SystemCheck(
+            status=status,
+            provider=provider,
+            message=message,
+            detail={
+                "model": settings.rerank_model,
+                "base_url_configured": bool(settings.rerank_base_url),
+                "api_key_configured": api_key_configured,
+                "top_n": settings.rerank_top_n,
+                "timeout": settings.rerank_timeout_seconds,
+                "fallback": "heuristic" if missing_key else "",
+                "disabled": provider in {"disabled", "none"},
+                "enabled": enabled and not missing_key,
+            },
+        )
+
     def _document_task_counts(self) -> dict[str, int]:
         tasks = self.document_tasks.list()
         return {
@@ -193,3 +230,11 @@ class SystemService:
             "failed": sum(1 for task in tasks if task.status == DocumentTaskStatus.failed),
             "active": self.active_document_tasks(),
         }
+
+    @staticmethod
+    def _json_detail(raw: str) -> dict:
+        try:
+            parsed = json.loads(raw or "{}")
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
