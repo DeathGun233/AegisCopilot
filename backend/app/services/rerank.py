@@ -13,7 +13,7 @@ class RerankService:
         self,
         *,
         provider: str = "heuristic",
-        model: str = "qwen3-vl-rerank",
+        model: str = "qwen3-rerank",
         base_url: str = "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank",
         api_key: str = "",
         top_n: int = 40,
@@ -51,7 +51,7 @@ class RerankService:
                     candidates,
                     rerank_weight,
                     source="heuristic-fallback",
-                    error_message="missing rerank api key",
+                    error_message="missing explicit DashScope rerank api key",
                 )
             try:
                 return self._qwen_rerank(query, candidates)
@@ -65,7 +65,7 @@ class RerankService:
         return self._heuristic_rerank(candidates, rerank_weight)
 
     def _qwen_rerank(self, query: str, candidates: list[dict[str, object]]) -> list[RetrievalResult]:
-        documents = [str(item["chunk"].text) for item in candidates]
+        documents = [self._rerank_document_text(item["chunk"]) for item in candidates]
         remote_scores = self._call_qwen(query, documents)
         if len(remote_scores) != len(candidates):
             raise RuntimeError("qwen rerank response score count does not match candidates")
@@ -222,3 +222,33 @@ class RerankService:
         if isinstance(section_path, str) and section_path:
             return f"{chunk.document_title} | {section_path} | chunk {chunk.chunk_index + 1}"
         return f"{chunk.document_title} | chunk {chunk.chunk_index + 1}"
+
+    @staticmethod
+    def _rerank_document_text(chunk: Any) -> str:
+        metadata = dict(getattr(chunk, "metadata", {}) or {})
+        fields: list[tuple[str, object]] = [
+            ("document_title", getattr(chunk, "document_title", "")),
+            ("section_path", metadata.get("section_path", "")),
+            ("table_name", metadata.get("table_name", "")),
+            ("row_id", metadata.get("row_id", "")),
+            ("effective_date", metadata.get("effective_date", "")),
+        ]
+        core_metadata = {
+            key: metadata.get(key)
+            for key in (
+                "country",
+                "region",
+                "channel",
+                "incoterm",
+                "product_category",
+                "product_categories",
+                "doc_type",
+                "currency",
+            )
+            if metadata.get(key) not in (None, "", [])
+        }
+        lines = [f"{key}: {value}" for key, value in fields if value]
+        if core_metadata:
+            lines.append(f"metadata: {json.dumps(core_metadata, ensure_ascii=False, sort_keys=True)}")
+        lines.append(f"text: {getattr(chunk, 'text', '')}")
+        return "\n".join(lines)

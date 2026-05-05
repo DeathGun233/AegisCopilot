@@ -176,7 +176,7 @@ def _match_section_heading(line: str) -> tuple[int, str, str] | None:
 
 
 def _section_to_chunks(section: _Section, *, chunk_size: int, overlap: int) -> list[StructuredTextChunk]:
-    if section.level == 1 and section.children:
+    if section.children and (section.level == 1 or (not section.marker and not normalize_text("\n".join(section.content_lines)))):
         chunks = [
             StructuredTextChunk(
                 text=section.render(include_children=False),
@@ -361,7 +361,7 @@ def _stable_table_row_id(section: _Section, table_name: str, row_pairs: list[str
 def _category_slug(category: str) -> str:
     mapping = {
         "带电": "battery",
-        "纯电池": "battery",
+        "纯电池": "pure-battery",
         "液体": "liquid",
         "粉末": "powder",
         "食品": "food",

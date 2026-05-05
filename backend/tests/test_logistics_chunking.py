@@ -94,6 +94,22 @@ def test_us_fba_remote_fee_row_id_matches_logistics_eval_dataset() -> None:
     assert fee.metadata["row_id"] in expected_rows
 
 
+def test_pure_battery_table_row_id_uses_distinct_slug() -> None:
+    text = """
+# 欧洲 DDP 渠道清关资料表
+## 德国
+### 纯电池
+| 国家/地区 | 渠道 | 品类 | 要求 | 限制 | 生效日期 |
+| --- | --- | --- | --- | --- | --- |
+| 德国 | DDP空派 | 纯电池 | 不接收纯电池产品 | 纯电池不接 | 2026-05-01 |
+"""
+
+    chunks = split_into_structured_chunks(text)
+    row = next(chunk for chunk in chunks if chunk.metadata.get("block_type") == "table_row")
+
+    assert row.metadata["row_id"] == "row-de-ddp-pure-battery"
+
+
 def test_markdown_contiguous_lists_are_kept_as_single_rule_block() -> None:
     text = """
 # 禁限运品规则

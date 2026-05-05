@@ -166,3 +166,16 @@ def test_evaluation_retrieval_metrics_use_raw_hit_results_and_ignore_context() -
     assert run.details[0]["retrieval_hit_count"] == 1
     assert run.details[0]["retrieval_context_count"] == 1
     assert run.details[0]["first_relevant_rank"] == 1
+
+
+def test_logistics_gold_dataset_has_phase2_coverage_size() -> None:
+    import json
+    from pathlib import Path
+
+    dataset_path = Path(__file__).resolve().parents[2] / "evaluation" / "logistics_qa.json"
+    cases = json.loads(dataset_path.read_text(encoding="utf-8"))
+
+    assert len(cases) >= 80
+    assert any(case.get("query_type") == "country_mismatch" for case in cases)
+    assert any(case.get("product_category") == "粉末" for case in cases)
+    assert any(case.get("query_type") == "version_lookup" for case in cases)

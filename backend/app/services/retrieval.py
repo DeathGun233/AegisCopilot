@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import hashlib
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Any
@@ -245,7 +246,7 @@ class RetrievalService:
                 result_records.append(
                     {
                         "result": updated,
-                        "signature": f"{updated.document_id}:{normalize_text(updated.text)[:120].lower()}",
+                        "signature": self._result_signature(updated),
                         "variant_label": variant.label,
                     }
                 )
@@ -537,6 +538,10 @@ class RetrievalService:
         return expanded
 
     def _same_section_chunk_results(self, result: RetrievalResult) -> list[RetrievalResult]:
+        child_results = self._child_chunk_results(result)
+        if child_results:
+            return child_results
+
         prefix = self._section_expansion_prefix(result.metadata)
         if not prefix:
             return []
@@ -555,38 +560,58 @@ class RetrievalService:
             parts = self._section_path_parts(chunk.metadata)
             if len(parts) < len(prefix) or parts[: len(prefix)] != prefix:
                 continue
-            section_results.append(
-                RetrievalResult(
-                    chunk_id=chunk.id,
-                    document_id=chunk.document_id,
-                    document_title=chunk.document_title,
-                    text=chunk.text,
-                    score=round(max(result.score - 0.01, settings.min_grounding_score), 4),
-                    source=f"{chunk.document_title}#chunk-{chunk.chunk_index}",
-                    display_source=self._display_source(chunk),
-                    retrieval_method="section",
-                    keyword_score=result.keyword_score,
-                    semantic_score=result.semantic_score,
-                    semantic_source=result.semantic_source,
-                    rerank_score=result.rerank_score,
-                    rerank_source=result.rerank_source,
-                    rerank_model=result.rerank_model,
-                    rerank_error=result.rerank_error,
-                    coverage_score=result.coverage_score,
-                    matched_query=result.matched_query,
-                    query_variant=result.query_variant,
-                    query_boost=result.query_boost,
-                    result_type="context",
-                    is_context_expansion=True,
-                    parent_result_id=result.chunk_id,
-                    parent_chunk_id=result.chunk_id,
-                    expansion_reason="same_section",
-                    score_inherited=True,
-                    score_note="Context expansion result; scores are inherited from the parent hit with positional decay.",
-                    metadata=dict(chunk.metadata),
-                )
-            )
+            section_results.append(self._context_result_from_chunk(result, chunk, expansion_reason="same_section"))
         return section_results
+
+    def _child_chunk_results(self, result: RetrievalResult) -> list[RetrievalResult]:
+        child_ids = result.metadata.get("child_chunk_ids")
+        if not isinstance(child_ids, list) or not child_ids:
+            return []
+        try:
+            chunks = sorted(
+                self.vector_store.list_chunks_for_document(result.document_id),
+                key=lambda item: item.chunk_index,
+            )
+        except Exception:
+            return []
+        child_id_set = {str(item) for item in child_ids if str(item)}
+        return [
+            self._context_result_from_chunk(result, chunk, expansion_reason="child_chunk")
+            for chunk in chunks
+            if chunk.id in child_id_set
+        ]
+
+    @staticmethod
+    def _context_result_from_chunk(result: RetrievalResult, chunk, *, expansion_reason: str) -> RetrievalResult:
+        return RetrievalResult(
+            chunk_id=chunk.id,
+            document_id=chunk.document_id,
+            document_title=chunk.document_title,
+            text=chunk.text,
+            score=round(max(result.score - 0.01, settings.min_grounding_score), 4),
+            source=f"{chunk.document_title}#chunk-{chunk.chunk_index}",
+            display_source=RetrievalService._display_source(chunk),
+            retrieval_method="section",
+            keyword_score=result.keyword_score,
+            semantic_score=result.semantic_score,
+            semantic_source=result.semantic_source,
+            rerank_score=result.rerank_score,
+            rerank_source=result.rerank_source,
+            rerank_model=result.rerank_model,
+            rerank_error=result.rerank_error,
+            coverage_score=result.coverage_score,
+            matched_query=result.matched_query,
+            query_variant=result.query_variant,
+            query_boost=result.query_boost,
+            result_type="context",
+            is_context_expansion=True,
+            parent_result_id=result.chunk_id,
+            parent_chunk_id=result.chunk_id,
+            expansion_reason=expansion_reason,
+            score_inherited=True,
+            score_note="Context expansion result; scores are inherited from the parent hit with positional decay.",
+            metadata=dict(chunk.metadata),
+        )
 
     def _adjacent_chunk_results(self, result: RetrievalResult) -> list[RetrievalResult]:
         try:
@@ -776,7 +801,19 @@ class RetrievalService:
 
     @staticmethod
     def _result_signature(item: RetrievalResult) -> str:
-        return normalize_text(item.text)[:180].lower()
+        metadata = item.metadata or {}
+        block_type = str(metadata.get("block_type", "")).strip().lower()
+        row_id = str(metadata.get("row_id", "")).strip()
+        section_path = str(metadata.get("section_path", "")).strip()
+        if block_type == "table_row" and row_id:
+            return f"table_row:{item.document_id}:{section_path}:{row_id}".lower()
+
+        chunk_id = item.chunk_id.strip()
+        if chunk_id:
+            return f"chunk:{item.document_id}:{chunk_id}".lower()
+
+        text_hash = hashlib.sha1(normalize_text(item.text).encode("utf-8")).hexdigest()[:16]
+        return f"text:{item.document_id}:{section_path}:{text_hash}".lower()
 
     @staticmethod
     def _metadata_match_score(query_metadata: dict[str, Any], chunk_metadata: dict[str, Any]) -> float:
@@ -797,8 +834,12 @@ class RetrievalService:
             if not query_value:
                 continue
             total += weight
-            chunk_value = str(chunk_metadata.get(key, "")).strip().lower()
-            if chunk_value and query_value == chunk_value:
+            raw_chunk_value = chunk_metadata.get(key, "")
+            if isinstance(raw_chunk_value, list):
+                chunk_values = {str(value).strip().lower() for value in raw_chunk_value if str(value).strip()}
+            else:
+                chunk_values = {str(raw_chunk_value).strip().lower()} if str(raw_chunk_value).strip() else set()
+            if query_value in chunk_values:
                 score += weight
         if total <= 0:
             return 0.0

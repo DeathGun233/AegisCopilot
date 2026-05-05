@@ -13,6 +13,20 @@ def test_extracts_customs_metadata_from_germany_ddp_battery_title() -> None:
     assert metadata["doc_type"] == "customs_rule"
 
 
+def test_extracts_pure_battery_before_general_battery_category() -> None:
+    metadata = extract_logistics_metadata("德国 DDP 纯电池不接，带电产品需单独确认。")
+
+    assert metadata["product_category"] == "纯电池"
+    assert metadata["product_categories"] == ["纯电池", "带电"]
+
+
+def test_explicit_table_category_takes_priority_over_restriction_text() -> None:
+    metadata = extract_logistics_metadata("品类：带电 限制：纯电池不接，内置电池需单独确认")
+
+    assert metadata["product_category"] == "带电"
+    assert metadata["product_categories"] == ["带电", "纯电池"]
+
+
 def test_extracts_fee_metadata_from_us_fba_remote_surcharge_text() -> None:
     metadata = extract_logistics_metadata("美国 FBA 偏远附加费表，生效日期：2026-05-01，币种 USD。")
 

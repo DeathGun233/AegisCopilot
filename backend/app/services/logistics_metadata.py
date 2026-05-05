@@ -22,7 +22,7 @@ REGION_RULES: list[tuple[str, str]] = [
     ("Southeast Asia", "东南亚|southeast asia"),
 ]
 
-PRODUCT_CATEGORIES = ("带电", "纯电池", "液体", "粉末", "食品", "化妆品", "纺织品", "普货")
+PRODUCT_CATEGORIES = ("纯电池", "带电", "液体", "粉末", "食品", "化妆品", "纺织品", "普货")
 INCOTERMS = ("DDP", "DAP", "EXW", "FOB")
 CHANNELS = ("FBA空派", "FBA海派", "FBA卡派", "DDP空派", "DDP海派", "DHL", "UPS", "FedEx", "FBA", "邮政小包")
 CURRENCIES = ("USD", "EUR", "CNY", "RMB", "GBP", "JPY")
@@ -55,10 +55,16 @@ def extract_logistics_metadata(text: str, *, base_metadata: dict[str, Any] | Non
             metadata.setdefault("channel", channel)
             break
 
-    for category in PRODUCT_CATEGORIES:
-        if category in source:
-            metadata.setdefault("product_category", category)
-            break
+    explicit_category = _extract_explicit_product_category(source)
+    product_categories = []
+    if explicit_category:
+        product_categories.append(explicit_category)
+    product_categories.extend(
+        category for category in PRODUCT_CATEGORIES if category in source and category not in product_categories
+    )
+    if product_categories:
+        metadata.setdefault("product_categories", product_categories)
+        metadata.setdefault("product_category", product_categories[0])
 
     effective_date = _extract_effective_date(source)
     if effective_date:
@@ -82,6 +88,17 @@ def _extract_effective_date(text: str) -> str:
         return ""
     year, month, day = matched.groups()
     return f"{year}-{int(month):02d}-{int(day):02d}"
+
+
+def _extract_explicit_product_category(text: str) -> str:
+    matched = re.search(r"(?:品类|产品品类|product_category|category)\s*[:：]\s*([^\s|，,；;\n]+)", text, flags=re.IGNORECASE)
+    if not matched:
+        return ""
+    value = matched.group(1)
+    for category in PRODUCT_CATEGORIES:
+        if category in value:
+            return category
+    return ""
 
 
 def _infer_doc_type(text: str) -> str:

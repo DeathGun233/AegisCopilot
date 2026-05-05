@@ -28,6 +28,16 @@ def client(tmp_path: Path):
         "vector_store_provider": settings.vector_store_provider,
         "milvus_uri": settings.milvus_uri,
         "milvus_collection": settings.milvus_collection,
+        "milvus_metric_type": settings.milvus_metric_type,
+        "milvus_index_type": settings.milvus_index_type,
+        "milvus_index_params": settings.milvus_index_params,
+        "milvus_search_params": settings.milvus_search_params,
+        "rerank_provider": settings.rerank_provider,
+        "rerank_model": settings.rerank_model,
+        "rerank_base_url": settings.rerank_base_url,
+        "rerank_api_key": settings.rerank_api_key,
+        "rerank_top_n": settings.rerank_top_n,
+        "rerank_timeout_seconds": settings.rerank_timeout_seconds,
     }
 
     settings.storage_dir = tmp_path / "storage"
@@ -42,6 +52,16 @@ def client(tmp_path: Path):
     settings.vector_store_provider = "local"
     settings.milvus_uri = "http://localhost:19530"
     settings.milvus_collection = "aegis_chunks"
+    settings.milvus_metric_type = "COSINE"
+    settings.milvus_index_type = "AUTOINDEX"
+    settings.milvus_index_params = "{}"
+    settings.milvus_search_params = "{}"
+    settings.rerank_provider = "qwen"
+    settings.rerank_model = "qwen3-rerank"
+    settings.rerank_base_url = "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank"
+    settings.rerank_api_key = ""
+    settings.rerank_top_n = 40
+    settings.rerank_timeout_seconds = 15
     ensure_storage_dirs()
     reset_container()
 
@@ -158,8 +178,20 @@ def test_system_status_reports_readiness_and_providers(client: TestClient) -> No
     assert payload["providers"]["vector"]["detail"]["selection_mode"] == "startup"
     assert payload["providers"]["vector"]["detail"]["restart_required_for_changes"] is True
     assert payload["providers"]["vector"]["detail"]["available_providers"] == ["local", "milvus"]
+    assert payload["providers"]["vector"]["detail"]["metric_type"] == "COSINE"
+    assert payload["providers"]["vector"]["detail"]["index_type"] == "AUTOINDEX"
+    assert payload["providers"]["vector"]["detail"]["search_params"] == {}
     assert payload["providers"]["embedding"]["provider"] == "disabled"
     assert payload["providers"]["llm"]["provider"] == "mock"
+    assert payload["providers"]["rerank"]["provider"] == "qwen"
+    assert payload["providers"]["rerank"]["status"] == "warning"
+    assert payload["providers"]["rerank"]["detail"]["model"] == "qwen3-rerank"
+    assert payload["providers"]["rerank"]["detail"]["base_url_configured"] is True
+    assert payload["providers"]["rerank"]["detail"]["api_key_configured"] is False
+    assert payload["providers"]["rerank"]["detail"]["top_n"] == 40
+    assert payload["providers"]["rerank"]["detail"]["timeout"] == 15
+    assert payload["providers"]["rerank"]["detail"]["fallback"] == "heuristic"
+    assert payload["providers"]["rerank"]["detail"]["disabled"] is False
     assert payload["document_tasks"]["queued"] == 0
     assert payload["document_tasks"]["running"] == 0
     assert payload["document_tasks"]["failed"] == 0

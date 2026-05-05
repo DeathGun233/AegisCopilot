@@ -15,6 +15,7 @@ from ..models import (
 from ..repositories import DocumentRepository, DocumentTaskRepository
 from ..vector_store import VectorStore
 from .embeddings import EmbeddingService
+from .chunk_hierarchy import assign_chunk_hierarchy
 from .logistics_metadata import extract_logistics_metadata
 from .text import normalize_text, split_into_structured_chunks, tokenize
 
@@ -26,6 +27,7 @@ class DocumentService:
         task_repo: DocumentTaskRepository,
         vector_store: VectorStore,
         embeddings: EmbeddingService,
+        start_worker: bool = True,
     ) -> None:
         self.repo = repo
         self.task_repo = task_repo
@@ -34,8 +36,10 @@ class DocumentService:
         self._task_queue: Queue[str] = Queue()
         self._active_task_ids: set[str] = set()
         self._active_lock = Lock()
-        self._worker = Thread(target=self._worker_loop, name="document-index-worker", daemon=True)
-        self._worker.start()
+        self._worker: Thread | None = None
+        if start_worker:
+            self._worker = Thread(target=self._worker_loop, name="document-index-worker", daemon=True)
+            self._worker.start()
 
     def get_current_embedding_version(self) -> str:
         return self.embeddings.get_version()
@@ -374,7 +378,7 @@ class DocumentService:
         chunk_texts = [chunk.text for chunk in structured_chunks]
         vectors = self.embeddings.embed_texts(chunk_texts) if self.embeddings.is_enabled() else []
         embedding_version = self.embeddings.get_version() if vectors else ""
-        return [
+        chunks = [
             Chunk(
                 document_id=document.id,
                 document_title=document.title,
@@ -395,6 +399,7 @@ class DocumentService:
             )
             for index, chunk_text in enumerate(chunk_texts)
         ]
+        return assign_chunk_hierarchy(chunks)
 
     def _resolved_document_embedding_version(self, chunks: list[Chunk]) -> str:
         for chunk in chunks:

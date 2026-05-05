@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -9,6 +10,15 @@ def _read_bool(name: str, default: bool) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _read_json_object(name: str, default: str = "{}") -> str:
+    raw = os.getenv(name, default)
+    try:
+        parsed = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return default
+    return json.dumps(parsed if isinstance(parsed, dict) else {}, ensure_ascii=False)
 
 
 def _pick_api_key() -> str:
@@ -25,7 +35,7 @@ def _pick_embedding_api_key() -> str:
 
 
 def _pick_rerank_api_key() -> str:
-    return os.getenv("AEGIS_RERANK_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or _pick_api_key()
+    return os.getenv("AEGIS_RERANK_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or ""
 
 
 class Settings(BaseModel):
@@ -43,7 +53,7 @@ class Settings(BaseModel):
     default_retrieval_min_score: float = float(os.getenv("AEGIS_RETRIEVAL_MIN_SCORE", "0.08"))
     min_grounding_score: float = float(os.getenv("AEGIS_MIN_GROUNDING_SCORE", "0.18"))
     rerank_provider: str = os.getenv("AEGIS_RERANK_PROVIDER", "qwen").strip().lower() or "qwen"
-    rerank_model: str = os.getenv("AEGIS_RERANK_MODEL", "qwen3-vl-rerank")
+    rerank_model: str = os.getenv("AEGIS_RERANK_MODEL", "qwen3-rerank")
     rerank_base_url: str = os.getenv(
         "AEGIS_RERANK_BASE_URL",
         "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank",
@@ -70,10 +80,16 @@ class Settings(BaseModel):
     embedding_api_key: str = _pick_embedding_api_key()
     embedding_dimensions: int = int(os.getenv("AEGIS_EMBEDDING_DIMENSIONS", "1024"))
     embedding_batch_size: int = int(os.getenv("AEGIS_EMBEDDING_BATCH_SIZE", "10"))
+    ocr_enabled: bool = _read_bool("AEGIS_OCR_ENABLED", False)
+    ocr_languages: str = os.getenv("AEGIS_OCR_LANGUAGES", "chi_sim+eng")
     vector_store_provider: str = os.getenv("AEGIS_VECTOR_STORE_PROVIDER", "local").strip().lower() or "local"
     milvus_uri: str = os.getenv("AEGIS_MILVUS_URI", "http://localhost:19530")
     milvus_token: str = os.getenv("AEGIS_MILVUS_TOKEN", "")
     milvus_collection: str = os.getenv("AEGIS_MILVUS_COLLECTION", "aegis_chunks")
+    milvus_metric_type: str = os.getenv("AEGIS_MILVUS_METRIC_TYPE", "COSINE").strip().upper() or "COSINE"
+    milvus_index_type: str = os.getenv("AEGIS_MILVUS_INDEX_TYPE", "AUTOINDEX").strip().upper() or "AUTOINDEX"
+    milvus_index_params: str = _read_json_object("AEGIS_MILVUS_INDEX_PARAMS", "{}")
+    milvus_search_params: str = _read_json_object("AEGIS_MILVUS_SEARCH_PARAMS", "{}")
     environment: str = os.getenv("AEGIS_ENV", "local")
     auth_session_ttl_minutes: int = int(os.getenv("AEGIS_AUTH_SESSION_TTL_MINUTES", "480"))
     persist_auth_sessions: bool = _read_bool("AEGIS_PERSIST_AUTH_SESSIONS", False)

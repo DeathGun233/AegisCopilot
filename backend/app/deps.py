@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import json
 from pathlib import Path
 
 from fastapi import Header, HTTPException, status
@@ -91,7 +92,10 @@ class Container:
             self.vector_store,
             self.embedding_service,
         )
-        self.extraction_service = ExtractionService()
+        self.extraction_service = ExtractionService(
+            enable_ocr=settings.ocr_enabled,
+            ocr_languages=settings.ocr_languages,
+        )
         self.retrieval_service = RetrievalService(
             self.documents,
             self.vector_store,
@@ -134,6 +138,10 @@ class Container:
                 token=settings.milvus_token,
                 collection=settings.milvus_collection,
                 dimension=settings.embedding_dimensions,
+                metric_type=settings.milvus_metric_type,
+                index_type=settings.milvus_index_type,
+                index_params=json.loads(settings.milvus_index_params or "{}"),
+                search_params=json.loads(settings.milvus_search_params or "{}"),
             )
         raise ValueError(
             "Unsupported AEGIS_VECTOR_STORE_PROVIDER "

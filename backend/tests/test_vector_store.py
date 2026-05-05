@@ -696,6 +696,42 @@ def test_retrieval_soft_boosts_logistics_metadata_matches(tmp_path: Path) -> Non
     assert hit_ids[0] == "chunk-de-battery"
 
 
+def test_retrieval_does_not_dedupe_similar_table_rows_with_distinct_row_ids() -> None:
+    from app.models import RetrievalResult
+    from app.services.retrieval import RetrievalService
+
+    germany = RetrievalResult(
+        chunk_id="chunk-de-battery",
+        document_id="doc-eu-ddp",
+        document_title="欧洲 DDP 渠道清关资料表",
+        text="要求：需要 MSDS、UN38.3、运输鉴定书",
+        score=0.91,
+        source="欧洲 DDP 渠道清关资料表#chunk-1",
+        metadata={
+            "block_type": "table_row",
+            "section_path": "德国 > 带电产品",
+            "row_id": "row-de-ddp-battery",
+        },
+    )
+    france = RetrievalResult(
+        chunk_id="chunk-fr-battery",
+        document_id="doc-eu-ddp",
+        document_title="欧洲 DDP 渠道清关资料表",
+        text="要求：需要 MSDS、UN38.3、运输鉴定书",
+        score=0.9,
+        source="欧洲 DDP 渠道清关资料表#chunk-2",
+        metadata={
+            "block_type": "table_row",
+            "section_path": "法国 > 带电产品",
+            "row_id": "row-fr-ddp-battery",
+        },
+    )
+
+    deduped = RetrievalService._dedupe_results([germany, france])
+
+    assert [item.chunk_id for item in deduped] == ["chunk-de-battery", "chunk-fr-battery"]
+
+
 def test_local_vector_store_delegates_to_existing_chunk_storage() -> None:
     from app.vector_store import LocalVectorStore
 
@@ -817,6 +853,46 @@ def test_milvus_vector_store_pages_list_and_stats_queries(monkeypatch: pytest.Mo
         "doc-a": {"chunk_count": 3, "embedded_chunk_count": 3},
         "doc-b": {"chunk_count": 2, "embedded_chunk_count": 2},
     }
+
+
+def test_milvus_vector_store_uses_configurable_index_and_search_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.vector_store import MilvusVectorStore
+
+    class FakeMilvusClient:
+        def __init__(self, *, uri: str, token: str | None = None) -> None:
+            self.created_collections: list[dict[str, object]] = []
+            self.search_calls: list[dict[str, object]] = []
+
+        def has_collection(self, collection_name: str) -> bool:
+            return False
+
+        def create_collection(self, **kwargs: object) -> None:
+            self.created_collections.append(kwargs)
+
+        def search(self, **kwargs: object) -> list:
+            self.search_calls.append(kwargs)
+            return [[]]
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "pymilvus",
+        SimpleNamespace(MilvusClient=FakeMilvusClient, DataType=SimpleNamespace(VARCHAR="varchar")),
+    )
+    store = MilvusVectorStore(
+        uri="http://localhost:19530",
+        token="",
+        collection="aegis_chunks",
+        dimension=3,
+        metric_type="IP",
+        index_type="HNSW",
+        index_params={"M": 32, "efConstruction": 160},
+        search_params={"ef": 96},
+    )
+
+    assert store.client.created_collections[0]["metric_type"] == "IP"
+    assert store.client.created_collections[0]["index_params"] == {"M": 32, "efConstruction": 160}
+    store.search_candidates("query", [0.1, 0.2, 0.3], limit=5)
+    assert store.client.search_calls[0]["search_params"] == {"metric_type": "IP", "params": {"ef": 96}}
 
 
 def test_settings_default_to_local_vector_store_provider() -> None:
