@@ -88,7 +88,7 @@ class MilvusVectorStore:
         dimension: int,
         query_limit: int = 16384,
         metric_type: str = "COSINE",
-        index_type: str = "AUTOINDEX",
+        index_type: str = "FLAT",
         index_params: dict[str, object] | None = None,
         search_params: dict[str, object] | None = None,
     ) -> None:

@@ -895,11 +895,44 @@ def test_milvus_vector_store_uses_configurable_index_and_search_params(monkeypat
     assert store.client.search_calls[0]["search_params"] == {"metric_type": "IP", "params": {"ef": 96}}
 
 
+def test_milvus_vector_store_defaults_to_flat_cosine(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.vector_store import MilvusVectorStore
+
+    class FakeMilvusClient:
+        def __init__(self, *, uri: str, token: str | None = None) -> None:
+            self.created_collections: list[dict[str, object]] = []
+
+        def has_collection(self, collection_name: str) -> bool:
+            return False
+
+        def create_collection(self, **kwargs: object) -> None:
+            self.created_collections.append(kwargs)
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "pymilvus",
+        SimpleNamespace(MilvusClient=FakeMilvusClient, DataType=SimpleNamespace(VARCHAR="varchar")),
+    )
+
+    store = MilvusVectorStore(
+        uri="http://localhost:19530",
+        token="",
+        collection="aegis_chunks",
+        dimension=3,
+    )
+
+    created = store.client.created_collections[0]
+    assert created["metric_type"] == "COSINE"
+    assert created["index_type"] == "FLAT"
+
+
 def test_settings_default_to_local_vector_store_provider() -> None:
     from app.config import settings
 
     assert settings.vector_store_provider == "local"
     assert settings.milvus_collection == "aegis_chunks"
+    assert settings.milvus_metric_type == "COSINE"
+    assert settings.milvus_index_type == "FLAT"
 
 
 def test_container_uses_milvus_vector_store_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:

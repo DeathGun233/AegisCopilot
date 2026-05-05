@@ -38,7 +38,7 @@ def test_env_example_uses_local_vector_store_and_docs_advertise_milvus_setup() -
     assert "AEGIS_MILVUS_URI=http://localhost:19530" in env_example
     assert "AEGIS_MILVUS_COLLECTION=aegis_chunks" in env_example
     assert "AEGIS_MILVUS_METRIC_TYPE=COSINE" in env_example
-    assert "AEGIS_MILVUS_INDEX_TYPE=AUTOINDEX" in env_example
+    assert "AEGIS_MILVUS_INDEX_TYPE=FLAT" in env_example
     assert "pip install -e .[milvus]" in startup_doc
     assert 'AEGIS_VECTOR_STORE_PROVIDER = "milvus"' in startup_doc
     assert "AEGIS_MILVUS_INDEX_PARAMS" in startup_doc

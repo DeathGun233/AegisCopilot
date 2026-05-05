@@ -128,9 +128,9 @@ Milvus 索引和查询参数可以显式配置，并会在 `/system/status` 的 
 
 ```powershell
 $env:AEGIS_MILVUS_METRIC_TYPE = "COSINE"
-$env:AEGIS_MILVUS_INDEX_TYPE = "HNSW"
-$env:AEGIS_MILVUS_INDEX_PARAMS = '{"M": 32, "efConstruction": 160}'
-$env:AEGIS_MILVUS_SEARCH_PARAMS = '{"ef": 96}'
+$env:AEGIS_MILVUS_INDEX_TYPE = "FLAT"
+$env:AEGIS_MILVUS_INDEX_PARAMS = '{}'
+$env:AEGIS_MILVUS_SEARCH_PARAMS = '{}'
 ```
 
 ## 7. Qwen rerank 配置

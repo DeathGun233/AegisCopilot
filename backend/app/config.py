@@ -87,7 +87,7 @@ class Settings(BaseModel):
     milvus_token: str = os.getenv("AEGIS_MILVUS_TOKEN", "")
     milvus_collection: str = os.getenv("AEGIS_MILVUS_COLLECTION", "aegis_chunks")
     milvus_metric_type: str = os.getenv("AEGIS_MILVUS_METRIC_TYPE", "COSINE").strip().upper() or "COSINE"
-    milvus_index_type: str = os.getenv("AEGIS_MILVUS_INDEX_TYPE", "AUTOINDEX").strip().upper() or "AUTOINDEX"
+    milvus_index_type: str = os.getenv("AEGIS_MILVUS_INDEX_TYPE", "FLAT").strip().upper() or "FLAT"
     milvus_index_params: str = _read_json_object("AEGIS_MILVUS_INDEX_PARAMS", "{}")
     milvus_search_params: str = _read_json_object("AEGIS_MILVUS_SEARCH_PARAMS", "{}")
     environment: str = os.getenv("AEGIS_ENV", "local")
